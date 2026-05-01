@@ -1,0 +1,51 @@
+[OutputDatabaseLinkFile]
+Version=1.1
+[DatabaseLinks]
+ConnectionString=Provider=MICROSOFT.ACE.OLEDB.12.0;Data Source=D:\projects\be-done-with-it-passives\build\tdk-capacitors.xls;Extended Properties="Excel 8.0;HDR=Yes;IMEX=1"
+AddMode=3
+RemoveMode=1
+UpdateMode=2
+ViewMode=0
+LeftQuote=[
+RightQuote=]
+QuoteTableNames=1
+UseTableSchemaName=0
+DefaultColumnType=VARCHAR(255)
+LibraryDatabaseType=Microsoft Excel
+LibraryDatabasePath=tdk-capacitors.xls
+DatabasePathRelative=1
+TopPanelCollapsed=0
+LibrarySearchPath=..\altium;pcb;sch
+OrcadMultiValueDelimiter=,
+SearchSubDirectories=1
+SchemaName=
+LastFocusedTable=CGA$
+[Table1]
+SchemaName=
+TableName=CGA$
+Enabled=True
+UserWhere=0
+UserWhereText=
+BrowserOrder_Sorting=
+BrowserOrder_Grouping=
+BrowserOrder_Visible=Comment0=145|Description0=273|Library Path0=83|Library Ref0=77|Footprint Path0=98|Footprint Ref0=92|Footprint Path 20=107|Footprint Ref 20=101|Footprint Path 30=107|Footprint Ref 30=101|MFG0=47|MPN0=145|Package0=65|Value0=52|Tolerance0=73|Tcr0=66|Tr0=45|Qual0=58|Voltage0=63
+[FieldMap1]
+Options=FieldName=CGA$.Comment|TableNameOnly=CGA$|FieldNameOnly=Comment|FieldType=0|ParameterName=Comment|VisibleOnAdd=False|AddMode=0|RemoveMode=0|UpdateMode=0
+[FieldMap2]
+Options=FieldName=CGA$.Description|TableNameOnly=CGA$|FieldNameOnly=Description|FieldType=1|ParameterName=[Description]|VisibleOnAdd=False|AddMode=0|RemoveMode=0|UpdateMode=0
+[FieldMap3]
+Options=FieldName=CGA$.Library Path|TableNameOnly=CGA$|FieldNameOnly=Library Path|FieldType=1|ParameterName=[Library Path]|VisibleOnAdd=False|AddMode=0|RemoveMode=0|UpdateMode=0
+[FieldMap4]
+Options=FieldName=CGA$.Library Ref|TableNameOnly=CGA$|FieldNameOnly=Library Ref|FieldType=1|ParameterName=[Library Ref]|VisibleOnAdd=False|AddMode=0|RemoveMode=0|UpdateMode=0
+[FieldMap5]
+Options=FieldName=CGA$.Footprint Path|TableNameOnly=CGA$|FieldNameOnly=Footprint Path|FieldType=1|ParameterName=[Footprint Path]|VisibleOnAdd=False|AddMode=0|RemoveMode=0|UpdateMode=0
+[FieldMap6]
+Options=FieldName=CGA$.Footprint Ref|TableNameOnly=CGA$|FieldNameOnly=Footprint Ref|FieldType=1|ParameterName=[Footprint Ref]|VisibleOnAdd=False|AddMode=0|RemoveMode=0|UpdateMode=0
+[FieldMap7]
+Options=FieldName=CGA$.Footprint Path 2|TableNameOnly=CGA$|FieldNameOnly=Footprint Path 2|FieldType=1|ParameterName=[Footprint Path 2]|VisibleOnAdd=False|AddMode=0|RemoveMode=0|UpdateMode=0
+[FieldMap8]
+Options=FieldName=CGA$.Footprint Ref 2|TableNameOnly=CGA$|FieldNameOnly=Footprint Ref 2|FieldType=1|ParameterName=[Footprint Ref 2]|VisibleOnAdd=False|AddMode=0|RemoveMode=0|UpdateMode=0
+[FieldMap9]
+Options=FieldName=CGA$.Footprint Path 3|TableNameOnly=CGA$|FieldNameOnly=Footprint Path 3|FieldType=1|ParameterName=[Footprint Path 3]|VisibleOnAdd=False|AddMode=0|RemoveMode=0|UpdateMode=0
+[FieldMap10]
+Options=FieldName=CGA$.Footprint Ref 3|TableNameOnly=CGA$|FieldNameOnly=Footprint Ref 3|FieldType=1|ParameterName=[Footprint Ref 3]|VisibleOnAdd=False|AddMode=0|RemoveMode=0|UpdateMode=0

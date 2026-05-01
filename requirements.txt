@@ -1,0 +1,17 @@
+# Runtime dependencies for the per-vendor generator scripts and the
+# house-footprints merge under house/. Python 3.11+ is required (the
+# merge script imports the stdlib `tomllib` module to read settings.toml).
+#
+# `xlwt` is the only third-party dep -- the per-vendor scripts use it to
+# write the database `.xls` files that Altium's DbLib reads. Everything
+# else in the pipeline (the per-vendor footprints JSON, the merge step,
+# the parametric STEP 3D generator, and the C# .pcblib autogenerator's
+# Python-side inputs) is pure stdlib.
+#
+# Install into a virtualenv:
+#   python3.11 -m venv .venv
+#   . .venv/bin/activate          (Linux/macOS)
+#   .venv\Scripts\activate        (Windows)
+#   pip install -r requirements.txt
+
+xlwt>=1.3.0

@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    HouseLibGenerator: regenerates build/house.PcbLib from
+    build/footprints/house-footprints.json (the strongly-typed sidecar
+    written by house/build_house_footprints.py).
+
+    Wired into the repo Makefile via the `house-pcblib` target. See
+    house/HouseLibGenerator/README.md for the design overview.
+
+    Targets net8.0 because that is what the published
+    OriginalCircuit.AltiumSharp 1.0.2 NuGet package supports
+    (the v2 rewrite is unreleased and not on NuGet at time of writing).
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>HouseLibGenerator</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OriginalCircuit.AltiumSharp" Version="1.0.2" />
+  </ItemGroup>
+
+</Project>
