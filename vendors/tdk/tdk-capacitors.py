@@ -146,7 +146,7 @@ wb.save(os.path.join(BUILD_DIR, "tdk-capacitors.xls"))
 # Emits build/footprints/tdk-capacitors-footprints.json with one entry
 # per (CAPC body, density) pair. Consumed by
 # house/build_house_footprints.py (merge step), house/build_step_models.py
-# (parametric STEP 3D model generator) and house/HouseLibGenerator/
+# (parametric STEP 3D model generator) and house/altium_pcblib/
 # (.PcbLib autogenerator).
 
 def _build_footprint_rows(bodies):

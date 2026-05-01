@@ -26,7 +26,7 @@
 # run in a browser (Pyodide) for an open-source web UI.
 #
 # `make house-pcblib` finally runs the autogenerator under
-# house/HouseLibGenerator/ -- a small C# project that consumes
+# house/altium_pcblib/ -- a pure-stdlib Python package that consumes
 # house-footprints.json + build/step/*.step and emits
 # build/house.PcbLib directly, applying IPC-7351B pad math (Tables
 # 3-5/3-6) and the DDL-001 drawing standards (rounded-rect 25%-radius
@@ -73,43 +73,22 @@
 #                            the pure-Python engine in house/stepgen/
 #   make house-pcblib        autogenerate build/house.PcbLib from the
 #                            merged JSON + STEP models via
-#                            house/HouseLibGenerator (.NET; see README
-#                            "Setup" for SDK install). STEP models are
+#                            house/altium_pcblib (pure-stdlib Python;
+#                            implements MS-CFB v3 + AltiumSharp v1.0.2's
+#                            record format directly). STEP models are
 #                            zlib-embedded so the .pcblib stands alone.
 #   make clean               remove generated files from build/
 #
 # Overrides:
 #   make PYTHON=py            use a different Python launcher (default: python)
-#   make DOTNET=/path/dotnet  use a non-PATH .NET SDK (default: dotnet)
 #   make CP=install           use a different copy command (default: cp)
 
 PYTHON         ?= python
-DOTNET         ?= dotnet
 CP             ?= cp
-
-# Auto-detect ~/.dotnet/dotnet when the default `dotnet` isn't on
-# PATH. Microsoft's official install-dotnet.sh installs to
-# ~/.dotnet/ but doesn't touch PATH, so first-time Linux/WSL users
-# routinely hit "dotnet: No such file or directory" on `make
-# house-pcblib` even though they did install the SDK. The
-# `$(origin DOTNET)` test is "file" when DOTNET came from the `?=`
-# above, vs. "command line" / "environment" if the user explicitly
-# overrode it -- in the override case we leave their choice alone
-# and let any missing-binary error propagate. (Note: `?=` produces
-# origin "file", not "default" -- "default" is reserved for Make's
-# built-in variables like CC.)
-ifeq ($(origin DOTNET),file)
-ifeq ($(shell command -v dotnet 2>/dev/null),)
-ifneq ($(wildcard $(HOME)/.dotnet/dotnet),)
-DOTNET := $(HOME)/.dotnet/dotnet
-$(info auto-selected DOTNET=$(DOTNET) (dotnet not on PATH; pass DOTNET=... to override))
-endif
-endif
-endif
 BUILD_DIR      := build
 FOOTPRINTS_DIR := $(BUILD_DIR)/footprints
 STEP_DIR       := $(BUILD_DIR)/step
-HOUSE_GEN_DIR  := house/HouseLibGenerator
+PCBLIB_DIR     := house/altium_pcblib
 STEPGEN_DIR    := house/stepgen
 
 # Per-vendor footprint JSONs that must exist before the merge step.
@@ -120,14 +99,18 @@ VENDOR_FOOTPRINT_JSON := \
 	$(FOOTPRINTS_DIR)/murata-capacitors-footprints.json
 
 # Sources that, when changed, should force a rebuild of build/house.PcbLib.
-HOUSE_GEN_SRCS := \
-	$(HOUSE_GEN_DIR)/HouseLibGenerator.csproj \
-	$(HOUSE_GEN_DIR)/Program.cs \
-	$(HOUSE_GEN_DIR)/FootprintInput.cs \
-	$(HOUSE_GEN_DIR)/IpcRules.cs \
-	$(HOUSE_GEN_DIR)/PadCalculator.cs \
-	$(HOUSE_GEN_DIR)/ChipFootprintBuilder.cs \
-	$(HOUSE_GEN_DIR)/DdlConventions.cs
+PCBLIB_SRCS := \
+	house/build_pcblib.py \
+	$(PCBLIB_DIR)/__init__.py \
+	$(PCBLIB_DIR)/binary.py \
+	$(PCBLIB_DIR)/cfb.py \
+	$(PCBLIB_DIR)/ddl.py \
+	$(PCBLIB_DIR)/footprint.py \
+	$(PCBLIB_DIR)/ipc.py \
+	$(PCBLIB_DIR)/primitives.py \
+	$(PCBLIB_DIR)/records.py \
+	$(PCBLIB_DIR)/writer.py \
+	$(PCBLIB_DIR)/_library_params_template.txt
 
 # Sources that, when changed, should force a rebuild of build/step/*.step.
 # Listed individually (rather than $(wildcard ...)) so adding a new file
@@ -228,15 +211,16 @@ $(STEP_DIR)/.stamp: $(STEPGEN_SRCS) $(FOOTPRINTS_DIR)/house-footprints.json
 # manual 0.05mm solder mask expansion, 3D body on Mech 1, outline +
 # centroid on Mech 15, no silkscreen, no courtyard) and sized per IPC-
 # 7351B Tables 3-5/3-6. Each component body has its parametric 3D
-# model embedded in-place from build/step/<FootprintName>.step.
+# model embedded in-place from build/step/<FootprintRoot>.step.
 #
-# The generator is a small C# project under house/HouseLibGenerator/.
-# We use `dotnet run` (which restores + builds + runs in one go), so
-# the only host requirement is the .NET 8 SDK on PATH (see README's
-# Setup section). Output goes straight into build/.
-$(BUILD_DIR)/house.PcbLib: $(FOOTPRINTS_DIR)/house-footprints.json $(STEP_DIR)/.stamp $(HOUSE_GEN_SRCS)
+# The writer is pure-stdlib Python under house/altium_pcblib/. It
+# implements MS-CFB v3 + AltiumSharp v1.0.2's record format directly,
+# so there are no external dependencies (no .NET SDK, no AltiumSharp,
+# no OpenMcdf). Output is byte-stable across builds (deterministic
+# DATE/TIME placeholders + content-derived 3D model GUIDs).
+$(BUILD_DIR)/house.PcbLib: $(FOOTPRINTS_DIR)/house-footprints.json $(STEP_DIR)/.stamp $(PCBLIB_SRCS)
 	@mkdir -p $(BUILD_DIR)
-	$(DOTNET) run --project $(HOUSE_GEN_DIR) -c Release -- \
+	$(PYTHON) house/build_pcblib.py \
 	    --input    $(FOOTPRINTS_DIR)/house-footprints.json \
 	    --output   $@ \
 	    --step-dir $(STEP_DIR)
@@ -277,6 +261,7 @@ clean:
 	$(RM) $(BUILD_DIR)/murata-capacitors.DbLib
 	$(RM) $(BUILD_DIR)/murata-ferrite.DbLib
 	$(RM) $(BUILD_DIR)/samsung-capacitors.DbLib
-	$(RM) -r $(HOUSE_GEN_DIR)/bin $(HOUSE_GEN_DIR)/obj
 	$(RM) -r $(STEPGEN_DIR)/__pycache__
+	$(RM) -r $(PCBLIB_DIR)/__pycache__
 	$(RM) -r vendors/__pycache__
+	$(RM) -r house/__pycache__

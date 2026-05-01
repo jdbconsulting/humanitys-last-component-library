@@ -7,7 +7,7 @@ This is the canonical input to two downstream pipeline steps:
 
   1. ``house/build_step_models.py`` reads the merged JSON to generate
      parametric STEP 3D models in ``build/step/*.step``.
-  2. ``house/HouseLibGenerator/`` (a small C# project) reads the merged
+  2. ``house/altium_pcblib/`` (driven by ``house/build_pcblib.py``) reads the merged
      JSON plus the STEP files to emit ``build/house.PcbLib`` -- the
      final Altium PCB footprint library.
 

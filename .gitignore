@@ -257,16 +257,6 @@ __pycache__/
 venv/
 
 #################
-## .NET (HouseLibGenerator)
-#################
-
-# C# build outputs from house/HouseLibGenerator/. Restore caches and
-# compiled artifacts; tracked source is .cs / .csproj only.
-bin/
-obj/
-*.user
-
-#################
 ## Generated Files
 #################
 

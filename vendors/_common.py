@@ -12,7 +12,7 @@ consumes those JSON files in two places:
      ``build/footprints/house-footprints.json`` (priority resolution
      per ``settings.toml``).
 
-  2. ``house/build_step_models.py`` and ``house/HouseLibGenerator/``
+  2. ``house/build_step_models.py`` and ``house/build_pcblib.py``
      read the merged JSON to emit parametric STEP 3D models and the
      final ``build/house.PcbLib`` respectively.
 

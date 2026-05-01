@@ -428,7 +428,7 @@ def main() -> int:
                          "JSON sidecar listing the unique CAPC "
                          "footprints referenced (consumed by "
                          "house/build_house_footprints.py and "
-                         "house/HouseLibGenerator/).")
+                         "house/altium_pcblib/).")
     ap.add_argument("--include-nrnd", action="store_true",
                     help="Also emit rows for 'NRND' (Not Recommended "
                          "for New Designs) parts. Default is to keep "

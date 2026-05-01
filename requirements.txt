@@ -2,11 +2,11 @@
 # house-footprints merge under house/. Python 3.11+ is required (the
 # merge script imports the stdlib `tomllib` module to read settings.toml).
 #
-# `xlwt` is the only third-party dep -- the per-vendor scripts use it to
-# write the database `.xls` files that Altium's DbLib reads. Everything
-# else in the pipeline (the per-vendor footprints JSON, the merge step,
-# the parametric STEP 3D generator, and the C# .pcblib autogenerator's
-# Python-side inputs) is pure stdlib.
+# `xlwt` is the only third-party dep -- the per-vendor scripts use it
+# to write the database `.xls` files that Altium's DbLib reads.
+# Everything else in the pipeline (the per-vendor footprints JSON, the
+# merge step, the parametric STEP 3D generator, and the .PcbLib
+# writer in house/altium_pcblib/) is pure stdlib.
 #
 # Install into a virtualenv:
 #   python3.11 -m venv .venv

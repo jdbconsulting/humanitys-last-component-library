@@ -13,10 +13,10 @@ stripped — and emit one STEP file per root:
     build/step/RESC0402X13.step    <-- shared by RESC0402X13{L,N,M}
     ...
 
-The HouseLibGenerator C# project (run by ``make house-pcblib``) loads
-each footprint's STEP file by stripping the same density suffix, so
-all three density variants in the .PcbLib end up referencing — and
-embedding — the same STEP body.
+The .PcbLib writer (``house/build_pcblib.py``, run by
+``make house-pcblib``) loads each footprint's STEP file by stripping
+the same density suffix, so all three density variants in the .PcbLib
+end up referencing -- and embedding -- the same STEP body.
 
 If two footprints share a root but disagree on body dimensions (which
 would be a regression in either the per-vendor JSONs or the merge
@@ -25,10 +25,11 @@ came first.
 
 Two consumers read these files:
 
-1. The HouseLibGenerator C# project, which zlib-compresses each STEP
-   and embeds it into the matching ``PcbComponentBody.StepModel`` of
-   every L/N/M variant of that root. After ``make all``, no external
-   STEP files are required for the .PcbLib to render in Altium.
+1. The pure-Python .PcbLib writer in ``house/altium_pcblib/``, which
+   zlib-compresses each STEP and embeds it into the matching
+   ``Library/Models/<n>`` stream of every L/N/M variant of that root.
+   After ``make all``, no external STEP files are required for the
+   .PcbLib to render in Altium.
 
 2. Humans, for inspection. Open them in any STEP viewer to check the
    geometry independently of Altium.

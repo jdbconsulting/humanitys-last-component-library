@@ -71,10 +71,11 @@ Notes:
 
 ## Setup
 
-The build has two host-side prerequisites:
+The build has a single host-side prerequisite:
 
-1. **Python 3.11+** — the per-vendor generator scripts, the `house-footprints` merge, and the parametric STEP generator are all Python; 3.11 is the floor because the merge reads `settings.toml` via the stdlib `tomllib`. The only third-party dep pinned in [`requirements.txt`](requirements.txt) is `xlwt` (writes the database `.xls` files Altium's DbLib reads). Everything else — the per-vendor footprints JSONs, the merge, and the STEP geometry engine — is pure stdlib.
-2. **.NET 8 SDK** — the `house-pcblib` target runs a small C# project under [`house/HouseLibGenerator/`](house/HouseLibGenerator) that consumes the merged JSON sidecar and writes `build/house.PcbLib` directly (using the [`OriginalCircuit.AltiumSharp`](https://www.nuget.org/packages/OriginalCircuit.AltiumSharp) NuGet package). This replaces the older "feed the .xls into Altium's IPC Compliant Footprints Batch Generator and hand-tweak every footprint" workflow.
+**Python 3.11+** — the per-vendor generator scripts, the `house-footprints` merge, the parametric STEP generator, and the `.PcbLib` writer are all Python. 3.11 is the floor because the merge reads `settings.toml` via the stdlib `tomllib`. The only third-party dependency pinned in [`requirements.txt`](requirements.txt) is `xlwt` (writes the database `.xls` files Altium's DbLib reads). Everything else — the per-vendor footprints JSONs, the merge, the STEP geometry engine, the MS-CFB v3 container writer, and the AltiumSharp v1.0.2-compatible record writer — is pure stdlib.
+
+> Earlier versions of this repo used a small C# project (under `house/HouseLibGenerator/`, since deleted) that wrapped the [`OriginalCircuit.AltiumSharp`](https://www.nuget.org/packages/OriginalCircuit.AltiumSharp) NuGet package to emit the `.PcbLib`. That dependency, plus its transitive .NET 8 SDK requirement, has been replaced by the pure-Python writer in [`house/altium_pcblib/`](house/altium_pcblib). Output is byte-stable across runs (same MD5 every build) and structurally identical to what the C# tool produced (verified end-to-end against AltiumSharp's reader on a 168-footprint reference library).
 
 ### Python virtualenv
 
@@ -98,36 +99,15 @@ pip install -r requirements.txt
 
 Once the venv is activated, plain `python` resolves to the venv's interpreter, so the default `make` recipes work without any override.
 
-### .NET 8 SDK
-
-`make house-pcblib` (and therefore `make all`) requires the .NET 8 SDK on `PATH`. The project file pins `<TargetFramework>net8.0</TargetFramework>` because the published `OriginalCircuit.AltiumSharp 1.0.2` NuGet package targets `net6.0` and we run it from a `net8.0` exe; .NET 9 or newer also works as long as `net6.0` runtime compatibility is preserved.
-
-**Linux / macOS / WSL — official install script (no sudo, installs into `~/.dotnet`):**
-
-```bash
-curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
-chmod +x /tmp/dotnet-install.sh
-/tmp/dotnet-install.sh --channel 8.0 --install-dir "$HOME/.dotnet"
-export PATH="$HOME/.dotnet:$PATH"   # add this to ~/.bashrc / ~/.zshrc to persist
-```
-
-Verify with `dotnet --info` (should report `8.0.x`).
-
-If you'd rather use your distro's package manager: on recent Ubuntu/Debian `sudo apt install dotnet-sdk-8.0` works, on macOS `brew install --cask dotnet-sdk`, and on Fedora `sudo dnf install dotnet-sdk-8.0`.
-
-**Windows** — install the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) from the official Microsoft page (the installer adds it to `PATH` automatically). Verify with `dotnet --info` in a new shell.
-
-The first `make all` after a clean checkout will pull `OriginalCircuit.AltiumSharp` from NuGet on demand; subsequent builds are offline.
-
 ### One-shot
 
-After both prerequisites are installed and the Python venv is activated:
+After the Python venv is activated:
 
 ```bash
 make all
 ```
 
-If you'd rather not activate the venv (or you want to use a system Python or a non-`PATH` dotnet), pass overrides to `make` — see [Building with make](#building-with-make) below.
+If you'd rather not activate the venv (or you want to use a system Python), pass an override to `make` — see [Building with make](#building-with-make) below.
 
 > **WSL note — `Permission denied` on `make clean`**
 >
@@ -145,15 +125,14 @@ Use the project `Makefile` to run generators consistently:
 - `make murata-ferrites` - run the placeholder Murata ferrite generator
 - `make house-footprints` - merge per-vendor footprints JSONs into `build/footprints/house-footprints.json`
 - `make house-step-models` - generate parametric 3D STEP models in `build/step/*.step` via `house/stepgen/`
-- `make house-pcblib` - autogenerate `build/house.PcbLib` from the merged JSON + STEP models (calls into `house/HouseLibGenerator/`)
-- `make clean` - remove every procedurally-generated file from `build/` plus the C# `bin/`/`obj/` caches
+- `make house-pcblib` - autogenerate `build/house.PcbLib` from the merged JSON + STEP models (calls into `house/altium_pcblib/`, the pure-Python writer)
+- `make clean` - remove every procedurally-generated file from `build/`
 
-You can override the tool launchers if needed (useful when you don't want to activate the venv created in [Setup](#setup), or when the system `python` isn't 3.11+, or when `dotnet` isn't on `PATH`):
+You can override the Python launcher if you don't want to activate the venv created in [Setup](#setup), or when the system `python` isn't 3.11+:
 
 - `make PYTHON=py all` (Windows Python launcher)
 - `make PYTHON=python3.12 all` (Linux/macOS without an activated venv)
 - `make PYTHON=.venv/bin/python all` (point directly at a non-activated venv)
-- `make DOTNET=$HOME/.dotnet/dotnet all` (when `dotnet` isn't on `PATH`)
 
 # Regenerating the Databases
 
@@ -197,29 +176,41 @@ RESC stays sharp-edged (no fillets) and instead uses a layered geometry that mir
 
 ## Autogenerating `build/house.PcbLib`
 
-`make house-pcblib` (also wired into `make all`) runs [`house/HouseLibGenerator/`](house/HouseLibGenerator), a small C# project that turns the JSON sidecar plus the parametric STEP files into `build/house.PcbLib` directly — no Altium IPC Batch Generator round-trip and no manual per-footprint tweaks. The generator applies:
+`make house-pcblib` (also wired into `make all`) runs [`house/build_pcblib.py`](house/build_pcblib.py), the driver script for the pure-Python writer in [`house/altium_pcblib/`](house/altium_pcblib). It turns the JSON sidecar plus the parametric STEP files into `build/house.PcbLib` directly — no Altium IPC Batch Generator round-trip, no manual per-footprint tweaks, no .NET dependency. The writer applies:
 
-- **IPC-7351B Tables 3-5/3-6 pad math** — toe `J_T`, heel `J_H`, side `J_S`, and round-off granularity per density level (L/N/M); fab tolerance `F = 0.10 mm` and placement tolerance `P = 0.05 mm` per IPC-7351B §3.1.3. The component-tolerance term `C` is zero by repo policy (the JSON sidecar enforces `Lmin == Lmax` etc. before the C# program ever runs). See [`house/HouseLibGenerator/IpcRules.cs`](house/HouseLibGenerator/IpcRules.cs) and [`PadCalculator.cs`](house/HouseLibGenerator/PadCalculator.cs).
-- **DDL-001 drawing standards** — rounded-rectangle pads with 25% corner radius on Top Layer; manual 0.05 mm solder mask expansion per pad; outline + centroid on Mechanical 15 with 0.1 mm line width; embedded parametric 3D model (zlib-compressed STEP) on Mechanical 1 at the nominal `L × W × H`; no silkscreen, no courtyard. See [`docs/standards/DDL-001.tex`](docs/standards/DDL-001.tex) and [`house/HouseLibGenerator/DdlConventions.cs`](house/HouseLibGenerator/DdlConventions.cs).
-- **Minimum solder mask sliver enforcement** — DDL-001 §11.2.5 requires ≥ 0.1 mm solder mask sliver between adjacent pad apertures. When IPC's calculated `G` falls below `0.1 + 2 × 0.05 = 0.20 mm`, the generator shrinks the pads inward (keeping the centre spacing fixed, only pulling the toe back) and prints a "pad shrunk" diagnostic to stderr so the deviation is auditable. The families that hit this in the current dataset are CAPC0402, CAPC0603, RESC0402, and RESC0603 — the same families the previous hand-tuned library carried adjustments for.
+- **IPC-7351B Tables 3-5/3-6 pad math** — toe `J_T`, heel `J_H`, side `J_S`, and round-off granularity per density level (L/N/M); fab tolerance `F = 0.10 mm` and placement tolerance `P = 0.05 mm` per IPC-7351B §3.1.3. The component-tolerance term `C` is zero by repo policy (the JSON sidecar enforces `Lmin == Lmax` etc. before the writer ever runs). See [`house/altium_pcblib/ipc.py`](house/altium_pcblib/ipc.py).
+- **DDL-001 drawing standards** — rounded-rectangle pads with 25% corner radius on Top Layer; manual 0.05 mm solder mask expansion per pad; outline + centroid on Mechanical 15 with 0.1 mm line width; embedded parametric 3D model (zlib-compressed STEP) on Mechanical 1 at the nominal `L × W × H`; no silkscreen, no courtyard. See [`docs/standards/DDL-001.tex`](docs/standards/DDL-001.tex) and [`house/altium_pcblib/ddl.py`](house/altium_pcblib/ddl.py).
+- **Minimum solder mask sliver enforcement** — DDL-001 §11.2.5 requires ≥ 0.1 mm solder mask sliver between adjacent pad apertures. When IPC's calculated `G - 2E` falls below 0.1 mm, the writer overlays a single Top Solder region across both apertures (instead of shrinking copper) and prints a "mask-bridge" diagnostic to stderr so the deviation is auditable. The families that hit this in the current dataset are CAPC0402, CAPC0603, RESC0402, and RESC0603.
 
-Two implementation notes worth flagging:
+The writer is structured into clean layers:
 
-1. **The library used is `OriginalCircuit.AltiumSharp 1.0.2`** (the v1 release on NuGet). The v2 rewrite at [github.com/issus/AltiumSharp](https://github.com/issus/AltiumSharp) has a much more complete primitive model but is `2.0.0-alpha.1 (Unreleased)` and isn't published; if a future iteration of this library needs custom-shape solder mask apertures or other features missing from v1, switching to v2 (consumed as a git submodule) is the planned escape hatch.
-2. **Two v1 writer-vs-reader parity bugs are worked around in the body emission**: v1's `ParameterCollection.Add(string, Coord)` and `Add(string, double)` write a bare key with no value when the value is `0`, but the matching `AsCoord()` / `AsDouble()` reader paths strict-parse and throw on the empty value. To keep the file friendly to round-tripping tools (and to defend against any other parser that strict-parses the same fields), the chip-body emitter sets every otherwise-zero `Coord` and `double` to a sub-display-precision value. See the comment block in [`ChipFootprintBuilder.cs`](house/HouseLibGenerator/ChipFootprintBuilder.cs) for the gory details.
+| Module | Role |
+|---|---|
+| [`altium_pcblib/cfb.py`](house/altium_pcblib/cfb.py) | Pure-Python MS-CFB v3 container writer (sectors, FAT, mini-FAT, directory tree). |
+| [`altium_pcblib/binary.py`](house/altium_pcblib/binary.py) | Length-prefixed binary block framing (mirrors AltiumSharp's `BinaryFormatWriter`). |
+| [`altium_pcblib/encoding`](house/altium_pcblib/binary.py) / `parameters_to_string` | Windows-1252 encoding + `\|KEY=VAL\|...` parameter list emitter. |
+| [`altium_pcblib/primitives.py`](house/altium_pcblib/primitives.py) | `Coord` (1/10000 mil), `CoordPoint`, `Layer` enum, OLE color packing. |
+| [`altium_pcblib/records.py`](house/altium_pcblib/records.py) | Dataclasses for `PcbPad`, `PcbTrack`, `PcbRegion`, `PcbComponentBody`, `PcbComponent`, `PcbModel`, `PcbLibrary`. |
+| [`altium_pcblib/writer.py`](house/altium_pcblib/writer.py) | Per-record binary serialisers; ties everything into the CFB container. |
+| [`altium_pcblib/ipc.py`](house/altium_pcblib/ipc.py) | IPC-7351B chip-component land pattern math. |
+| [`altium_pcblib/ddl.py`](house/altium_pcblib/ddl.py) | DDL-001 drawing-standards constants. |
+| [`altium_pcblib/footprint.py`](house/altium_pcblib/footprint.py) | High-level chip-footprint factory (combines the above). |
 
-To regenerate just the .PcbLib (after a vendor `.xls` change has already propagated):
+The writer's wire format target is **AltiumSharp v1.0.2-compatible**: the same record byte layout, parameter-list ordering, and field-default sentinels that the v1 NuGet writer produced. We replicate v1's specific quirks (e.g. `EMBED=T` instead of `EMBED=TRUE` in model metadata; `IDENTIFIER=67,104,...` codepoint encoding; `Coord.FromInt32(1)` sentinels for otherwise-zero fields) so the output round-trips through v1's reader cleanly. AltiumSharp's reader on a 168-footprint reference library yields **0 errors, 0 warnings, 0 DTO field diffs** vs. the older C#-emitted output, and 1180 of 1181 internal CFB streams are byte-identical (the lone exception is `Library/Data`, where we deliberately use a fixed sentinel `DATE`/`TIME` for reproducibility instead of the wall-clock).
+
+To regenerate just the .PcbLib (after a vendor JSON change has already propagated):
 
 ```bash
 make house-pcblib
 ```
 
-Or invoke the generator directly:
+Or invoke the writer directly:
 
 ```bash
-dotnet run --project house/HouseLibGenerator -- \
-    --input build/footprints/house-footprints.json \
-    --output build/house.PcbLib
+python house/build_pcblib.py \
+    --input    build/footprints/house-footprints.json \
+    --output   build/house.PcbLib \
+    --step-dir build/step
 ```
 
 > **Known quirk — resave the `.xls` in Microsoft Excel after every regeneration.**

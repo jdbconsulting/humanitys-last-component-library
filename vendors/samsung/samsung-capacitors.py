@@ -22,7 +22,7 @@ Outputs (both go to build/):
     - house/build_house_footprints.py (merged into house-footprints.json
       with priority resolution per settings.toml);
     - house/build_step_models.py (parametric STEP 3D model generator);
-    - house/HouseLibGenerator/ (.PcbLib autogenerator).
+    - house/altium_pcblib/ (.PcbLib autogenerator).
 
 After regenerating the database .xls, open it once in Microsoft Excel
 and re-save (keeping the .xls / Excel 97-2003 format) before Altium

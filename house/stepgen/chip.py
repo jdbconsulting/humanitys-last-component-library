@@ -2,9 +2,9 @@
 High-level chip-body STEP generators: ``capc``, ``resc``, ``indc``.
 
 Each function returns a complete STEP file as a single string. The
-caller is expected to write the string to disk and/or hand it to
-``OriginalCircuit.AltiumSharp.Records.PcbComponentBody.StepModel`` for
-embedding.
+caller is expected to write the string to disk and/or pass it to the
+.PcbLib writer (``house/altium_pcblib/``) for zlib-compressed
+embedding into the matching ``Library/Models/<n>`` stream.
 
 All three generators share the same parametric inputs ``(L, W, H, T)``:
 

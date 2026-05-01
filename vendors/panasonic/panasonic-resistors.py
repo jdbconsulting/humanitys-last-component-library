@@ -353,7 +353,7 @@ wb.save(os.path.join(BUILD_DIR, "panasonic-resistors.xls"))
 #   1. house/build_house_footprints.py merges every vendor's footprints
 #      JSON into a single house-footprints.json (priority resolution per
 #      settings.toml).
-#   2. The .PcbLib autogenerator under house/HouseLibGenerator/ and the
+#   2. The .PcbLib autogenerator under house/altium_pcblib/ and the
 #      STEP 3D model generator under house/stepgen/ both read the merged
 #      JSON to produce build/house.PcbLib.
 #
