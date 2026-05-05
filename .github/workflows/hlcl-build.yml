@@ -1,9 +1,25 @@
 name: Build HLCL libraries
 
+# Runs only on push to `main` (per maintainer policy). Manual / scheduled
+# triggers are intentionally absent so the rolling `latest` release always
+# tracks `main` and nothing else.
 on:
   push:
     branches: [main]
-  workflow_dispatch:
+
+# `gh release create` / `delete` mutates repo contents (tags, release
+# objects, uploaded assets), so the default read-only `GITHUB_TOKEN`
+# isn't enough — grant write here and nowhere else.
+permissions:
+  contents: write
+
+# Serialise concurrent runs against the rolling `latest` release. If two
+# pushes land back-to-back, only the latest one's release survives;
+# in-progress runs are cancelled because their assets would be overwritten
+# anyway.
+concurrency:
+  group: hlcl-build-release
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -55,9 +71,92 @@ jobs:
           fi
           ls -la hlcl/build/output
 
+      # Workflow artifact: kept for run-history and for downstream jobs
+      # that want to consume the raw tree via `actions/download-artifact`.
+      # Visitors looking for the latest build should grab the GitHub
+      # Release published below instead.
       - uses: actions/upload-artifact@v4
         with:
           name: hlcl-build-output
           path: hlcl/build/output/
           if-no-files-found: error
           retention-days: 90
+
+      # Pack the output tree into stable-named archives so the
+      # `/releases/latest/download/<asset>` URLs never change between
+      # builds. `zip` for Altium/Windows users, `tar.gz` for everyone
+      # else. Both archives are rooted at `output/` so unpacking keeps
+      # the directory layout the rest of the docs reference.
+      - name: Package build output for release
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          (cd hlcl/build && zip -r "$GITHUB_WORKSPACE/release/hlcl-build-output.zip" output)
+          tar -czf release/hlcl-build-output.tar.gz -C hlcl/build output
+          ls -la release
+
+      # Rolling `latest` release. Each push to `main` retags `latest` at
+      # the new commit and replaces the previous archives. We delete the
+      # old release-and-tag pair before recreating so the underlying
+      # git tag actually moves -- `gh release edit --target` only
+      # updates the release object's `target_commitish`, not the tag
+      # itself, which leaves `/releases/tag/latest` stuck on the
+      # original commit.
+      #
+      # Why not per-commit tags: visitors only ever want the newest
+      # build, and per-commit releases would clutter the Releases page.
+      # The workflow-run artifact above (90-day retention) already
+      # provides a per-commit history if anyone needs it. The
+      # `concurrency` group at the top of this file serialises runs
+      # against the same `latest` tag, so two pushes can't race.
+      - name: Publish rolling "latest" release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          SERVER_URL: ${{ github.server_url }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          short_sha=$(git rev-parse --short HEAD)
+          built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          # YAML's `|` block scalar strips the common leading indent
+          # before passing the body to bash, so by the time the heredoc
+          # runs every line is at column 0 already -- no extra dedent
+          # needed despite the visual indent here.
+          cat > release/notes.md <<EOF
+          Latest HLCL build of \`main\`, regenerated on every push.
+
+          - Commit: [\`${short_sha}\`](${SERVER_URL}/${REPO}/commit/${COMMIT_SHA})
+          - Built: ${built_at}
+          - Workflow run: [#${RUN_ID}](${SERVER_URL}/${REPO}/actions/runs/${RUN_ID})
+
+          ## Downloads
+
+          - **\`hlcl-build-output.zip\`** — full \`hlcl/build/output/\` tree (vendor \`.xls\` + \`.DbLib\` workbooks, merged footprints JSON, parametric STEP models, \`house.PcbLib\`, \`house.SchLib\`). Recommended for Altium / Windows users.
+          - **\`hlcl-build-output.tar.gz\`** — same tree, gzipped tar. Recommended for Linux / macOS users and CI consumers.
+
+          The \`latest\` tag is moved on every push to \`main\`, so the asset URLs above are stable across builds:
+
+          \`\`\`
+          ${SERVER_URL}/${REPO}/releases/latest/download/hlcl-build-output.zip
+          ${SERVER_URL}/${REPO}/releases/latest/download/hlcl-build-output.tar.gz
+          \`\`\`
+          EOF
+
+          # Drop the previous `latest` release and its tag if they
+          # exist. `--cleanup-tag` removes the underlying git tag so
+          # the recreate below can plant it on the new commit.
+          # `|| true` swallows the "release not found" error on the
+          # first run.
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+
+          gh release create latest \
+            --title "Latest HLCL build (${short_sha})" \
+            --notes-file release/notes.md \
+            --target "$COMMIT_SHA" \
+            --latest \
+            release/hlcl-build-output.zip \
+            release/hlcl-build-output.tar.gz

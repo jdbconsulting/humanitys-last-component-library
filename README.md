@@ -384,12 +384,27 @@ The `build/` directory at the repo root is what GitHub Pages serves. It contains
 
 ## Continuous integration
 
-Two workflows live under [`.github/workflows/`](.github/workflows). Both run on every push to `main` and can also be kicked off manually from the **Actions** tab via `workflow_dispatch`.
+Two workflows live under [`.github/workflows/`](.github/workflows). Both fire on every push to `main`. `pages.yml` is also exposed via `workflow_dispatch` so the live site can be redeployed without a code change; `hlcl-build.yml` deliberately is not, so the rolling `latest` release always tracks `main` and nothing else.
 
-| Workflow                                             | What it does                                                                                                                                                                                                                       | Output                                                                                                                                                                                                                                  |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`pages.yml`](.github/workflows/pages.yml)           | `npm ci && NODE_ENV=production npm run build` and ship `build/` (which contains the SvelteKit static bundle plus the auto-generated `hlcl-build-inputs.tgz` — the gzipped Pyodide-side mount of [`hlcl/`](hlcl/)) to GitHub Pages. | Live site at `https://hlcl.jdbrinton.consulting/`                                                                                                                                                                                       |
-| [`hlcl-build.yml`](.github/workflows/hlcl-build.yml) | `pip install -r requirements.txt && python hlcl/build.py` (default `all` target — pure Python, no native deps).                                                                                                                    | Workflow artifact `hlcl-build-output` containing the entire `hlcl/build/output/` tree (vendor `.xls` + `.DbLib` workbooks, `house.PcbLib`, `house.SchLib`). Downloaded from the **Actions** run page as a single zip; retained 90 days. |
+| Workflow                                             | What it does                                                                                                                                                                                                                       | Output                                                                                                                                                                                                                                                                                                                                                            |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`pages.yml`](.github/workflows/pages.yml)           | `npm ci && NODE_ENV=production npm run build` and ship `build/` (which contains the SvelteKit static bundle plus the auto-generated `hlcl-build-inputs.tgz` — the gzipped Pyodide-side mount of [`hlcl/`](hlcl/)) to GitHub Pages. | Live site at `https://hlcl.jdbrinton.consulting/`                                                                                                                                                                                                                                                                                                                 |
+| [`hlcl-build.yml`](.github/workflows/hlcl-build.yml) | `pip install -r requirements.txt && python hlcl/build.py` (default `all` target — pure Python, no native deps), then publishes the result as the rolling [`latest`](../../releases/latest) GitHub Release.                         | (1) Rolling **`latest`** GitHub Release with `hlcl-build-output.zip` and `hlcl-build-output.tar.gz` attached — visible in the repo's **Releases** sidebar with stable, permanent download URLs (see below). (2) Workflow artifact `hlcl-build-output` on each run page (90-day retention) for downstream `actions/download-artifact@v4` consumers and run history. |
+
+### Downloading the latest library
+
+Visitors who just want the prebuilt Altium library don't need to log in to GitHub or open the **Actions** tab. The two URLs below always resolve to the most recent successful build of `main`:
+
+```
+https://github.com/<owner>/<repo>/releases/latest/download/hlcl-build-output.zip
+https://github.com/<owner>/<repo>/releases/latest/download/hlcl-build-output.tar.gz
+```
+
+Both archives contain the same `hlcl/build/output/` tree (vendor `.xls` + `.DbLib` workbooks, merged footprints JSON, parametric STEP models, `house.PcbLib`, `house.SchLib`); pick whichever your platform's archiver prefers. The `latest` git tag is moved on every push to `main`, so the URLs themselves never change. The Releases page also lists every prior `latest` snapshot's commit SHA in its title (e.g. _Latest HLCL build (`abc1234`)_) for traceability.
+
+> The release publishing step requires the workflow's `GITHUB_TOKEN` to have `contents: write`, which is granted in `hlcl-build.yml` itself. If you fork the repo into an org with a default-restricted token policy, also flip **Settings → Actions → General → Workflow permissions** to **Read and write permissions** (or pin the same `permissions:` block in your fork's workflow).
+
+### Other consumers
 
 For a fork hosted at a different Pages path, set `BASE_PATH` (or unset it for a user / org page) in `pages.yml`:
 
@@ -400,7 +415,7 @@ For a fork hosted at a different Pages path, set `BASE_PATH` (or unset it for a 
     BASE_PATH: /my-fork # or BASE_PATH: '' for user/org pages
 ```
 
-To consume the prebuilt HLCL artifacts in another workflow (e.g. a release job that publishes them to a downstream library repo), use `actions/download-artifact@v4` against the `hlcl-build-output` name.
+To consume the prebuilt HLCL artifacts in another workflow (e.g. a release job that publishes them to a downstream library repo), use `actions/download-artifact@v4` against the `hlcl-build-output` name when running in the same repo, or download the release asset directly with `gh release download latest --repo <owner>/<repo> -p 'hlcl-build-output.zip'` from any external workflow.
 
 # Regenerating the Databases
 
