@@ -1,0 +1,13 @@
+{
+	"id": "yageo-rt",
+	"name": "Yageo RT",
+	"manufacturer": "Yageo",
+	"summary": "Precision thin-film chip resistors (0.01% to 1%, 5-50 ppm/C), 01005-1206.",
+	"kind": "resistor",
+	"subtype_id": "thin-film",
+	"subtype_label": "Thin film (precision)",
+	"subtype_order": 20,
+	"sort_order": 10,
+	"available_sizes": ["01005", "0201", "0402", "0603", "0805", "1206"],
+	"options": []
+}

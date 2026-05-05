@@ -1,0 +1,150 @@
+{
+	"id": "automotive",
+	"title": "Automotive · AEC-Q200",
+	"tagline": "AEC-Q200 / Q101",
+	"description": "Automotive-qualified passives only — Murata GCM and TDK CGA capacitors paired with Panasonic ERJ and Yageo AC thick-film resistors. Tighter F/P tolerances reflecting a pre-qualified assembly line. Density variant N picked across the board. Other families ship disabled in this preset; turn them on individually if your part list demands it.",
+	"bullets": [
+		"Murata GCM + TDK CGA automotive-qualified MLCC",
+		"Panasonic ERJ + Yageo AC AEC-Q200 thick-film resistors",
+		"Murata BLM chip ferrites for power-rail filtering",
+		"F = 0.075 mm, P = 0.035 mm (qualified placement line)",
+		"Solder-mask sliver bumped to 0.12 mm for AEC pads"
+	],
+	"sort_order": 30,
+	"config": {
+		"schema_version": "1.0.0",
+		"families": {
+			"panasonic-erj": {
+				"enabled": true,
+				"options": {
+					"enabled_densities": ["N"],
+					"sizes": ["01005", "0201", "0402", "0603", "0805"],
+					"override_pad_radius": 25
+				},
+				"overrides": {
+					"enabled_densities": false,
+					"sizes": false,
+					"override_pad_radius": false
+				}
+			},
+			"yageo-ac": {
+				"enabled": true,
+				"options": {
+					"enabled_densities": ["N"],
+					"sizes": ["0201", "0402", "0603", "0805", "1206"],
+					"override_pad_radius": 25
+				},
+				"overrides": {
+					"enabled_densities": false,
+					"sizes": false,
+					"override_pad_radius": false
+				}
+			},
+			"murata-gcm": {
+				"enabled": true,
+				"options": {
+					"enabled_densities": ["N"],
+					"sizes": ["0201", "0402", "0603", "0805", "1206", "1210"],
+					"override_pad_radius": 25,
+					"min_voltage": 16
+				},
+				"overrides": {
+					"enabled_densities": false,
+					"sizes": false,
+					"override_pad_radius": false
+				}
+			},
+			"tdk-capacitors": {
+				"enabled": true,
+				"options": {
+					"enabled_densities": ["N"],
+					"sizes": ["0603", "0805", "1206", "1210"],
+					"override_pad_radius": 25
+				},
+				"overrides": {
+					"enabled_densities": false,
+					"sizes": false,
+					"override_pad_radius": false
+				}
+			},
+			"murata-ferrites": {
+				"enabled": true,
+				"options": {
+					"enabled_densities": ["N"],
+					"sizes": ["0402", "0603", "1206"],
+					"override_pad_radius": 25
+				},
+				"overrides": {
+					"enabled_densities": false,
+					"sizes": false,
+					"override_pad_radius": false
+				}
+			}
+		},
+		"settings": {
+			"house_footprints": {
+				"priority": [
+					"panasonic-erj",
+					"yageo-ac",
+					"murata-gcm",
+					"tdk-capacitors",
+					"murata-ferrite"
+				]
+			},
+			"ipc": {
+				"fabrication_tolerance_mm": 0.075,
+				"placement_tolerance_mm": 0.035
+			},
+			"hlcl": {
+				"pad_corner_radius_percent": 25,
+				"solder_mask_expansion_mm": 0.05,
+				"min_solder_mask_sliver_mm": 0.12,
+				"outline_line_width_mm": 0.1,
+				"max_crosshair_half_arm_mm": 0.5,
+				"component_body_standoff_mm": 0,
+				"enabled_densities": ["N"],
+				"enabled_sizes": ["0201", "0402", "0603", "0805", "1206", "1210"]
+			},
+			"stepgen": {
+				"default_fillet_radius_mm": 0.05,
+				"resc_metal_thickness_fraction": 0.1,
+				"resc_metal_thickness_floor_mm": 0.02
+			},
+			"colors": {
+				"default": {
+					"body": [160, 160, 160]
+				},
+				"capc": {
+					"body": [184, 134, 11],
+					"terminal": [204, 204, 204]
+				},
+				"indc": {
+					"body": [38, 77, 148],
+					"terminal": [204, 204, 204]
+				},
+				"fb": {
+					"body": [38, 77, 148],
+					"terminal": [204, 204, 204]
+				},
+				"resc": {
+					"substrate": [158, 158, 158],
+					"passivation": [23, 23, 23],
+					"terminal": [128, 128, 128]
+				}
+			}
+		},
+		"artifacts": {
+			"xls": true,
+			"dblib": true,
+			"footprints_json": true,
+			"house_footprints_merge": true,
+			"step_models": true,
+			"pcblib": true,
+			"schlib": true,
+			"standards_tex": false,
+			"standards_md": false,
+			"zip_output": true
+		},
+		"crosslinks": []
+	}
+}

@@ -1,0 +1,13 @@
+{
+	"id": "panasonic-era-p",
+	"name": "Panasonic ERA-P",
+	"manufacturer": "Panasonic",
+	"summary": "Thin-film 500 V high-voltage, 1206 only.",
+	"kind": "resistor",
+	"subtype_id": "thin-film",
+	"subtype_label": "Thin film",
+	"subtype_order": 20,
+	"sort_order": 30,
+	"available_sizes": ["1206"],
+	"options": []
+}

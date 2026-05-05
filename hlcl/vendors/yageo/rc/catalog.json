@@ -1,0 +1,13 @@
+{
+	"id": "yageo-rc",
+	"name": "Yageo RC",
+	"manufacturer": "Yageo",
+	"summary": "General-purpose thick-film chip resistors (RC_L), 01005-1206.",
+	"kind": "resistor",
+	"subtype_id": "thick-film",
+	"subtype_label": "Thick film",
+	"subtype_order": 10,
+	"sort_order": 20,
+	"available_sizes": ["01005", "0201", "0402", "0603", "0805", "1206"],
+	"options": []
+}

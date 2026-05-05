@@ -1,0 +1,13 @@
+{
+	"id": "murata-grm",
+	"name": "Murata GRM",
+	"manufacturer": "Murata",
+	"summary": "Commercial / general-purpose MLCC.",
+	"kind": "capacitor",
+	"subtype_id": "mlcc-commercial",
+	"subtype_label": "MLCC (commercial)",
+	"subtype_order": 20,
+	"sort_order": 10,
+	"available_sizes": ["01005", "0201", "0402", "0603", "0805", "1206", "1210"],
+	"options": []
+}

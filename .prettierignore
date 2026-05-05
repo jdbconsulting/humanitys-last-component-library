@@ -1,0 +1,14 @@
+# Package Managers
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+bun.lock
+bun.lockb
+
+# Miscellaneous
+/static/
+
+# Vite-plugin-generated TS module — regenerated from
+# hlcl/vendors/<mfg>/<family>/catalog.json on every dev/build, never
+# hand-edited.
+/src/lib/_generated/

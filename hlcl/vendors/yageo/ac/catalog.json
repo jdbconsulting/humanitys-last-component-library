@@ -1,0 +1,13 @@
+{
+	"id": "yageo-ac",
+	"name": "Yageo AC",
+	"manufacturer": "Yageo",
+	"summary": "Automotive AEC-Q200 thick-film chip resistors, 0201-1206.",
+	"kind": "resistor",
+	"subtype_id": "thick-film-automotive",
+	"subtype_label": "Thick film (automotive-qualified)",
+	"subtype_order": 11,
+	"sort_order": 10,
+	"available_sizes": ["0201", "0402", "0603", "0805", "1206"],
+	"options": []
+}

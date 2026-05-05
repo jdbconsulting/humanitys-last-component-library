@@ -1,0 +1,13 @@
+{
+	"id": "murata-lqm",
+	"name": "Murata LQM",
+	"manufacturer": "Murata",
+	"summary": "LQM-series multilayer chip inductors (general-purpose / power), 0603-1206.",
+	"kind": "inductor",
+	"subtype_id": "multilayer-chip",
+	"subtype_label": "Multilayer chip inductors",
+	"subtype_order": 10,
+	"sort_order": 10,
+	"available_sizes": ["0603", "0805", "1206"],
+	"options": []
+}

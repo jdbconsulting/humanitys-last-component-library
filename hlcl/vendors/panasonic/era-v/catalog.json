@@ -1,0 +1,13 @@
+{
+	"id": "panasonic-era-v",
+	"name": "Panasonic ERA-V/K",
+	"manufacturer": "Panasonic",
+	"summary": "Thin-film high-stability, 0402–0805.",
+	"kind": "resistor",
+	"subtype_id": "thin-film",
+	"subtype_label": "Thin film",
+	"subtype_order": 20,
+	"sort_order": 20,
+	"available_sizes": ["0402", "0603", "0805"],
+	"options": []
+}

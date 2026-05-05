@@ -1,0 +1,13 @@
+{
+	"id": "ohmite-kdv",
+	"name": "Ohmite KDV",
+	"manufacturer": "Ohmite",
+	"summary": "Metal-film current-sense resistors.",
+	"kind": "resistor",
+	"subtype_id": "metal-film",
+	"subtype_label": "Metal film / current-sense",
+	"subtype_order": 30,
+	"sort_order": 10,
+	"available_sizes": ["0201", "0402", "0603", "0805", "1206"],
+	"options": []
+}

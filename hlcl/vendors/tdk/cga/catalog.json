@@ -1,0 +1,13 @@
+{
+	"id": "tdk-capacitors",
+	"name": "TDK CGA",
+	"manufacturer": "TDK",
+	"summary": "Automotive-qualified MLCC (CGA series).",
+	"kind": "capacitor",
+	"subtype_id": "mlcc-automotive",
+	"subtype_label": "MLCC (automotive-qualified)",
+	"subtype_order": 10,
+	"sort_order": 20,
+	"available_sizes": ["0603", "0805", "1206", "1210"],
+	"options": []
+}

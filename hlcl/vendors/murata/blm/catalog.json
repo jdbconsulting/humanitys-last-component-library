@@ -1,0 +1,13 @@
+{
+	"id": "murata-ferrites",
+	"name": "Murata BLM",
+	"manufacturer": "Murata",
+	"summary": "BLM-series chip ferrite beads.",
+	"kind": "ferrite",
+	"subtype_id": "chip-ferrite",
+	"subtype_label": "Chip ferrite beads",
+	"subtype_order": 10,
+	"sort_order": 10,
+	"available_sizes": ["0402", "0603", "1206"],
+	"options": []
+}

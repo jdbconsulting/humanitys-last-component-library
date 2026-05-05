@@ -1,0 +1,13 @@
+{
+	"id": "panasonic-era-a",
+	"name": "Panasonic ERA-A",
+	"manufacturer": "Panasonic",
+	"summary": "Thin-film high-precision, 0201 only.",
+	"kind": "resistor",
+	"subtype_id": "thin-film",
+	"subtype_label": "Thin film",
+	"subtype_order": 20,
+	"sort_order": 10,
+	"available_sizes": ["0201"],
+	"options": []
+}

@@ -1,0 +1,13 @@
+{
+	"id": "murata-lqw",
+	"name": "Murata LQW",
+	"manufacturer": "Murata",
+	"summary": "LQW-series wirewound chip inductors for RF, 0201-1210.",
+	"kind": "inductor",
+	"subtype_id": "wirewound-rf",
+	"subtype_label": "Wirewound RF inductors",
+	"subtype_order": 20,
+	"sort_order": 10,
+	"available_sizes": ["0201", "0402", "0603", "0805", "1210"],
+	"options": []
+}

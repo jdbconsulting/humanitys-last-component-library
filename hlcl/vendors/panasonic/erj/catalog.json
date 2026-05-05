@@ -1,0 +1,13 @@
+{
+	"id": "panasonic-erj",
+	"name": "Panasonic ERJ",
+	"manufacturer": "Panasonic",
+	"summary": "General-purpose thick-film chip resistors, 01005–0805.",
+	"kind": "resistor",
+	"subtype_id": "thick-film",
+	"subtype_label": "Thick film",
+	"subtype_order": 10,
+	"sort_order": 10,
+	"available_sizes": ["01005", "0201", "0402", "0603", "0805"],
+	"options": []
+}
