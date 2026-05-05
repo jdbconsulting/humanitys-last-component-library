@@ -51,7 +51,7 @@
 
 <div class="flex-1 border-b border-ink-200 bg-ink-50/40">
 	<div
-		class="mx-auto grid max-w-7xl gap-10 px-6 py-10 lg:grid-cols-[minmax(200px,17rem)_1fr] lg:gap-14 lg:py-14"
+		class="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:gap-10 sm:px-6 sm:py-10 lg:grid-cols-[minmax(200px,17rem)_1fr] lg:gap-14 lg:py-14"
 	>
 		<nav aria-label="Documentation" class="lg:sticky lg:top-[4.75rem] lg:self-start">
 			<p
@@ -91,7 +91,9 @@
 			</ul>
 		</nav>
 
-		<article class="min-w-0 rounded-xl border border-ink-200/80 bg-white p-8 shadow-sm sm:p-10">
+		<article
+			class="min-w-0 rounded-xl border border-ink-200/80 bg-white p-5 shadow-sm sm:p-8 lg:p-10"
+		>
 			{@render children()}
 		</article>
 	</div>

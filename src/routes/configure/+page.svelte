@@ -118,7 +118,7 @@
 
 <div class="flex flex-1 flex-col">
 	<div class="border-b border-ink-200 bg-white">
-		<div class="mx-auto max-w-7xl px-6 pt-6">
+		<div class="mx-auto max-w-7xl px-4 pt-5 sm:px-6 sm:pt-6">
 			<!-- Configuration identity row: file name + badge · library stats banner -->
 			<div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
 				<div class="flex min-w-0 flex-wrap items-center gap-3">
@@ -134,7 +134,7 @@
 								spellcheck="false"
 								autocomplete="off"
 								aria-label="Configuration file name without extension"
-								class="min-w-[8rem] flex-1 rounded border border-navy-300 bg-white px-2 py-0.5 text-lg font-bold text-ink-900 shadow-sm focus:border-navy-500 focus:ring-1 focus:ring-navy-500 focus:outline-none sm:min-w-[12rem] sm:text-xl"
+								class="min-w-[7rem] flex-1 rounded border border-navy-300 bg-white px-2 py-0.5 text-base font-bold text-ink-900 shadow-sm focus:border-navy-500 focus:ring-1 focus:ring-navy-500 focus:outline-none sm:min-w-[12rem] sm:text-xl"
 								bind:value={editStem}
 								onblur={commitConfigStem}
 								onkeydown={(e) => {
@@ -150,7 +150,7 @@
 								use:focusAndSelect
 							/>
 							<span
-								class="shrink-0 text-lg font-bold text-ink-400 select-none sm:text-xl"
+								class="shrink-0 text-base font-bold text-ink-400 select-none sm:text-xl"
 								aria-hidden="true"
 							>
 								.json
@@ -159,7 +159,7 @@
 					{:else}
 						<button
 							type="button"
-							class="group flex items-baseline gap-0.5 rounded px-1 py-0.5 text-xl font-bold transition hover:bg-ink-100"
+							class="group flex min-w-0 items-baseline gap-0.5 rounded px-1 py-0.5 text-base font-bold transition hover:bg-ink-100 sm:text-xl"
 							onclick={startEditingName}
 							title="Click to edit file name"
 						>
@@ -268,7 +268,7 @@
 						onclick={() => (active = 'generate')}
 						class={[
 							'self-end pt-0.5 pr-2 text-[10px] font-medium text-ink-500 underline-offset-2 transition hover:text-navy-700 hover:underline',
-							statsFresh && 'invisible pointer-events-none'
+							statsFresh && 'pointer-events-none invisible'
 						]}
 						aria-hidden={statsFresh ? 'true' : undefined}
 						tabindex={statsFresh ? -1 : 0}
@@ -309,7 +309,7 @@
 		</div>
 	</div>
 
-	<div class="mx-auto w-full max-w-7xl flex-1 px-6 py-8">
+	<div class="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
 		{#if active === 'presets'}
 			<PresetsTab />
 		{:else if active === 'libraries'}

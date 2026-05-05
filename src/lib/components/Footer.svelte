@@ -5,8 +5,8 @@
 </script>
 
 <footer class="border-t border-ink-200 bg-ink-50">
-	<div class="mx-auto max-w-7xl px-6 py-12 lg:py-16">
-		<div class="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
+	<div class="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-12 lg:py-16">
+		<div class="grid gap-8 sm:grid-cols-2 sm:gap-10 lg:grid-cols-4">
 			<div class="lg:col-span-2">
 				<a
 					href="https://jdbrinton.consulting"

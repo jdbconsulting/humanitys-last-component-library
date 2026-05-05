@@ -65,10 +65,16 @@ html {
 	background: var(--color-ink-50);
 	color: var(--color-ink-900);
 	-webkit-font-smoothing: antialiased;
+	/* Prevent stray horizontal bleed (e.g. an oversize child) from
+	 * producing a horizontal scrollbar on mobile. `clip` (vs. `hidden`)
+	 * does NOT establish a containing block, so `position: sticky` on
+	 * the header keeps working. */
+	overflow-x: clip;
 }
 
 body {
 	font-family: var(--font-sans);
+	overflow-x: clip;
 }
 
 ::selection {

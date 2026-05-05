@@ -81,7 +81,7 @@
 		aria-hidden="true"
 	></div>
 
-	<div class="relative z-10 mx-auto max-w-7xl px-6 pt-20 pb-24 sm:pt-28 lg:pt-32">
+	<div class="relative z-10 mx-auto max-w-7xl px-4 pt-12 pb-16 sm:px-6 sm:pt-20 sm:pb-24 lg:pt-32">
 		<div
 			class="lg:grid lg:grid-cols-[minmax(0,7fr)_minmax(0,3fr)] lg:items-center lg:gap-10 xl:gap-14"
 		>
@@ -90,20 +90,20 @@
 					href="https://jdbrinton.consulting/tools"
 					target="_blank"
 					rel="noopener noreferrer"
-					class="group inline-flex items-center gap-2.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-ink-100 backdrop-blur transition hover:border-accent-500/40 hover:bg-white/10"
+					class="group inline-flex max-w-full items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-medium text-ink-100 backdrop-blur transition hover:border-accent-500/40 hover:bg-white/10 sm:gap-2.5 sm:text-xs"
 				>
 					<JdbcMark size={14} />
-					<span class="text-ink-300">A tool by</span>
-					<span class="font-semibold text-white">JD Brinton Consulting, Inc.</span>
+					<span class="hidden text-ink-300 sm:inline">A tool by</span>
+					<span class="truncate font-semibold text-white">JD Brinton Consulting, Inc.</span>
 					<span class="text-accent-400 transition group-hover:translate-x-0.5">→</span>
 				</a>
 
 				<div
-					class="mt-4 flex flex-wrap items-center justify-center gap-2 sm:gap-3 lg:justify-start"
+					class="mt-4 flex flex-wrap items-center justify-center gap-1.5 sm:gap-3 lg:justify-start"
 				>
 					{#each heroStats as label (label)}
 						<span
-							class="inline-flex items-center rounded-full border border-accent-400/45 bg-accent-500/15 px-4 py-1.5 text-sm font-bold tabular-nums tracking-tight text-accent-200 shadow-[0_0_24px_-4px_rgba(245,158,11,0.35)] backdrop-blur-sm"
+							class="inline-flex items-center rounded-full border border-accent-400/45 bg-accent-500/15 px-3 py-1 text-xs font-bold tracking-tight text-accent-200 tabular-nums shadow-[0_0_24px_-4px_rgba(245,158,11,0.35)] backdrop-blur-sm sm:px-4 sm:py-1.5 sm:text-sm"
 						>
 							{label}
 						</span>
@@ -112,7 +112,7 @@
 
 				<div class="relative mt-6">
 					<h1
-						class="text-4xl font-bold tracking-tight text-balance text-white sm:text-5xl lg:text-6xl lg:leading-[1.05]"
+						class="text-3xl font-bold tracking-tight text-balance text-white sm:text-5xl lg:text-6xl lg:leading-[1.05]"
 					>
 						Stop fighting passive footprints.
 					</h1>
@@ -137,16 +137,19 @@
 						</div>
 					</div>
 				</div>
-				<p class="mt-6 text-lg text-pretty text-ink-300 sm:text-xl">
+				<p class="mt-5 text-base text-pretty text-ink-300 sm:mt-6 sm:text-lg lg:text-xl">
 					<strong class="font-semibold text-white">Humanity's Last Component Library</strong> is a
 					correct-by-construction passive two-terminal chip library. Pick the vendor families you
 					need, dial in the pad math and drawing standards, and generate the database, the
-					<code class="rounded bg-white/10 px-1.5 py-0.5 font-mono text-sm text-accent-200"
+					<code
+						class="rounded bg-white/10 px-1.5 py-0.5 font-mono text-xs text-accent-200 sm:text-sm"
 						>.PcbLib</code
 					>, and the parametric 3D models — all in your browser.
 				</p>
 
-				<div class="mt-10 flex flex-wrap items-center justify-center gap-3 lg:justify-start">
+				<div
+					class="mt-7 flex flex-wrap items-center justify-center gap-3 sm:mt-10 lg:justify-start"
+				>
 					<a
 						href={resolve('/configure/')}
 						class="inline-flex items-center gap-2 rounded-lg bg-accent-500 px-6 py-3 text-sm font-semibold text-navy-950 shadow-sm transition-all hover:bg-accent-400 hover:shadow-md"
@@ -171,13 +174,13 @@
 				</div>
 			</div>
 
-			<div class="mt-14 flex justify-center lg:mt-0 lg:justify-end lg:self-center">
+			<div class="mt-10 flex justify-center sm:mt-14 lg:mt-0 lg:justify-end lg:self-center">
 				<img
 					src={`${base}/images/hlcl-logo.png`}
 					width="747"
 					height="735"
 					alt="Humanity's Last Component Library"
-					class="w-full max-w-[280px] object-contain sm:max-w-sm lg:max-w-none"
+					class="w-full max-w-[220px] object-contain sm:max-w-sm lg:max-w-none"
 					loading="eager"
 					decoding="async"
 				/>
@@ -187,9 +190,9 @@
 
 	<!-- Bottom badge strip -->
 	<div class="relative z-10 border-t border-white/10 bg-black/70 backdrop-blur">
-		<div class="mx-auto max-w-7xl px-6 py-4">
+		<div class="mx-auto max-w-7xl px-4 py-4 sm:px-6">
 			<p
-				class="text-center text-[11px] font-medium tracking-[0.2em] text-ink-400 uppercase sm:text-xs"
+				class="text-center text-[10px] font-medium tracking-[0.18em] text-ink-400 uppercase sm:text-xs sm:tracking-[0.2em]"
 			>
 				Open-source · IPC-7351B · Runs in your browser · Altium-compatible (other EDA tools coming
 				soon)
@@ -200,9 +203,11 @@
 
 <!-- Feature grid -->
 <section class="border-b border-ink-200 bg-white">
-	<div class="mx-auto grid max-w-7xl gap-px bg-ink-200 px-6 py-px sm:grid-cols-2 lg:grid-cols-4">
+	<div
+		class="mx-auto grid max-w-7xl gap-px bg-ink-200 px-4 py-px sm:grid-cols-2 sm:px-6 lg:grid-cols-4"
+	>
 		{#each features as feature (feature.title)}
-			<div class="bg-white p-8">
+			<div class="bg-white p-6 sm:p-8">
 				<div
 					class="flex h-10 w-10 items-center justify-center rounded-md bg-navy-900 text-white shadow-sm"
 				>
@@ -273,20 +278,20 @@
 
 <!-- Vendor families section -->
 <section class="bg-ink-50">
-	<div class="mx-auto max-w-7xl px-6 py-20">
+	<div class="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-20">
 		<div class="mx-auto max-w-2xl text-center">
-			<h2 class="text-3xl font-bold tracking-tight text-ink-900 sm:text-4xl">
+			<h2 class="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl lg:text-4xl">
 				Vendor families included
 			</h2>
-			<p class="mt-4 text-base text-ink-600">
+			<p class="mt-3 text-sm text-ink-600 sm:mt-4 sm:text-base">
 				Mix and match — every family ships with the JEDEC dimensions and tolerance bands needed for
 				IPC-correct pad math.
 			</p>
 		</div>
-		<div class="mt-12 grid gap-6 sm:grid-cols-2">
+		<div class="mt-8 grid gap-4 sm:mt-12 sm:grid-cols-2 sm:gap-6">
 			{#each families as family (family.kind)}
 				<div
-					class="rounded-lg border border-ink-200 bg-white p-6 shadow-sm transition hover:border-ink-300 hover:shadow-md"
+					class="rounded-lg border border-ink-200 bg-white p-5 shadow-sm transition hover:border-ink-300 hover:shadow-md sm:p-6"
 				>
 					<div
 						class="flex items-center gap-2 text-sm font-semibold tracking-wider text-navy-800 uppercase"
@@ -315,14 +320,16 @@
 			{/each}
 		</div>
 
-		<p class="mx-auto mt-10 max-w-2xl text-center text-sm text-ink-600">
+		<p class="mx-auto mt-8 max-w-2xl text-center text-sm text-ink-600 sm:mt-10">
 			More vendor families are coming soon.
 		</p>
 
-		<div class="mt-16 rounded-xl border border-ink-200 bg-white p-8 shadow-sm sm:p-12">
-			<div class="grid gap-8 lg:grid-cols-2 lg:items-center">
+		<div class="mt-12 rounded-xl border border-ink-200 bg-white p-6 shadow-sm sm:mt-16 sm:p-12">
+			<div class="grid gap-6 sm:gap-8 lg:grid-cols-2 lg:items-center">
 				<div>
-					<h3 class="text-2xl font-bold tracking-tight text-ink-900">Nine-step workflow</h3>
+					<h3 class="text-xl font-bold tracking-tight text-ink-900 sm:text-2xl">
+						Nine-step workflow
+					</h3>
 					<p class="mt-3 text-sm text-ink-600">
 						The configurator walks you through every input the build needs. Your settings stay in
 						the browser; nothing is uploaded.
@@ -351,24 +358,26 @@
 </section>
 
 <!-- JDBC sponsor / "ready to build" CTA — mirrors the bottom-CTA on jdbrinton.consulting -->
-<section class="relative overflow-hidden bg-navy-950 py-20 sm:py-24">
+<section class="relative overflow-hidden bg-navy-950 py-14 sm:py-20 lg:py-24">
 	<div
 		class="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,rgba(245,158,11,0.08),transparent_60%)]"
 		aria-hidden="true"
 	></div>
-	<div class="relative mx-auto max-w-7xl px-6">
-		<div class="grid items-center gap-10 lg:grid-cols-[auto_1fr_auto]">
+	<div class="relative mx-auto max-w-7xl px-4 sm:px-6">
+		<div class="grid items-center gap-8 sm:gap-10 lg:grid-cols-[auto_1fr_auto]">
 			<div class="hidden lg:block">
 				<JdbcMark size={64} />
 			</div>
 			<div class="text-center lg:text-left">
-				<p class="text-xs font-semibold tracking-[0.2em] text-accent-400 uppercase">
+				<p class="text-[11px] font-semibold tracking-[0.2em] text-accent-400 uppercase sm:text-xs">
 					Maintained by JDBC
 				</p>
-				<h2 class="mt-3 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+				<h2
+					class="mt-2 text-xl font-bold tracking-tight text-white sm:mt-3 sm:text-2xl lg:text-3xl"
+				>
 					Building something exceptional?
 				</h2>
-				<p class="mt-3 max-w-2xl text-base leading-relaxed text-ink-300">
+				<p class="mt-3 max-w-2xl text-sm leading-relaxed text-ink-300 sm:text-base">
 					HLCL is one of several open-source tools we maintain at
 					<a
 						href="https://jdbrinton.consulting"
