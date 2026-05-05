@@ -251,16 +251,31 @@
 						</div>
 					</div>
 
-					{#if !statsFresh}
-						<button
-							type="button"
-							onclick={() => (active = 'generate')}
-							class="self-end pt-0.5 pr-2 text-[10px] font-medium text-ink-500 underline-offset-2 transition hover:text-navy-700 hover:underline"
-							title="Jump to the Generate tab and run a build to refresh these numbers"
-						>
-							{cachedStats ? 'stats are stale · ' : 'no build yet · '}rebuild to calculate →
-						</button>
-					{/if}
+					<!--
+						Always render the "rebuild to calculate" link so the
+						banner reserves vertical space for it even when the
+						stats are fresh — otherwise toggling between fresh and
+						stale (which happens on every config edit) shifts the
+						tab nav (and any button the user is currently hovering)
+						down a few pixels. `invisible` (visibility:hidden) keeps
+						the box in flow but stops painting it, and the
+						aria-hidden / tabindex / pointer-events guards make the
+						hidden state inert for assistive tech, keyboard users,
+						and stray clicks.
+					-->
+					<button
+						type="button"
+						onclick={() => (active = 'generate')}
+						class={[
+							'self-end pt-0.5 pr-2 text-[10px] font-medium text-ink-500 underline-offset-2 transition hover:text-navy-700 hover:underline',
+							statsFresh && 'invisible pointer-events-none'
+						]}
+						aria-hidden={statsFresh ? 'true' : undefined}
+						tabindex={statsFresh ? -1 : 0}
+						title="Jump to the Generate tab and run a build to refresh these numbers"
+					>
+						{cachedStats ? 'stats are stale · ' : 'no build yet · '}rebuild to calculate →
+					</button>
 				</div>
 			</div>
 
