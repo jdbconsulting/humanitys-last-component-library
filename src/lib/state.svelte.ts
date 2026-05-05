@@ -273,6 +273,10 @@ function migrateV1(raw: unknown): PersistedState | null {
 		config_name: sanitizeConfigFilenameStem(
 			typeof v1.configName === 'string' ? v1.configName : 'hlcl-build'
 		),
+		// Whatever the user had pre-v2 was already their hand-curated
+		// state -- treat the migrated name as user-typed so the
+		// auto-rename effect doesn't immediately stomp it on first edit.
+		name_origin: 'manual',
 		// Library-stats banner didn't exist pre-v2; the very next build
 		// will populate it.
 		build_stats: null
@@ -359,6 +363,13 @@ class AppState {
 			active_preset_id: null,
 			config_name: sanitizeConfigFilenameStem(reparsed.ui.config_name ?? '')
 		};
+		// Re-anchor the in-memory drift detector so the post-hydrate
+		// $effect tick sees no drift (otherwise opening the page after
+		// a preset application would itself fire the auto-rename, even
+		// though the user hasn't touched anything yet). Anchor against
+		// the live snapshot only when name_origin === 'preset' — for
+		// 'manual' we don't track drift at all, so the value is moot.
+		this.presetSnapshotKey = this.ui.name_origin === 'preset' ? this.snapshotKey() : '';
 	}
 
 	/** Snapshot the current state as a plain JSON-safe object. */
@@ -424,10 +435,17 @@ class AppState {
 		// hashes diverge, but if the user round-trips through Preset N
 		// → Preset M → Preset N the hash matches again and the numbers
 		// reappear. Clearing here would force a redundant rebuild.
+		//
+		// Marking `name_origin = 'preset'` re-arms the auto-rename
+		// effect even if the user had previously typed a custom name
+		// (locking origin to 'manual'); applying a preset is the one
+		// operation that's allowed to overwrite a hand-typed name with
+		// the preset's title.
 		this.ui = {
 			...this.ui,
 			active_preset_id: presetId,
-			config_name: sanitizeConfigFilenameStem(presetTitle)
+			config_name: sanitizeConfigFilenameStem(presetTitle),
+			name_origin: 'preset'
 		};
 		this.presetSnapshotKey = this.snapshotKey();
 	}
@@ -466,7 +484,13 @@ class AppState {
 			this.ui = {
 				...this.ui,
 				active_preset_id: null,
-				config_name: sanitizeConfigFilenameStem('imported-configuration')
+				config_name: sanitizeConfigFilenameStem('imported-configuration'),
+				// Treat the auto-generated import name as user intent —
+				// the user explicitly chose this configuration file, so
+				// editing afterward should NOT silently rename it to
+				// 'custom'. They can rename via the banner input if they
+				// want a different stem.
+				name_origin: 'manual'
 				// Cached build_stats are preserved; their config_hash will
 				// either match the imported config (round-trip) or stay
 				// stale until a fresh build.
@@ -477,18 +501,67 @@ class AppState {
 	}
 
 	/**
-	 * If the current state has drifted from the named preset, clear the
-	 * preset id so the UI shows "Custom configuration".
+	 * Run on every config / ui mutation by the `$effect` in
+	 * `+layout.svelte`. Reconciles two independent pieces of UI state
+	 * with the live `BuildConfig`:
+	 *
+	 *   1. **Preset / Custom badge** (`ui.active_preset_id`). If a
+	 *      preset is named and the snapshot key has drifted from the
+	 *      one captured at apply-time, the badge demotes to "Custom".
+	 *
+	 *   2. **Auto-rename of `config_name`** (`ui.name_origin`).
+	 *      Independent of (1) — survives a reload via the persisted
+	 *      origin field, even though `active_preset_id` is
+	 *      deliberately reset on hydrate. While `name_origin === 'preset'`
+	 *      and the snapshot drifts, the name flips to `'custom'` and
+	 *      the origin to `'manual'` (so subsequent edits don't keep
+	 *      stomping it). While `name_origin === 'manual'` we leave the
+	 *      name alone — the user's typed-in stem is durable until they
+	 *      explicitly apply another preset.
+	 *
+	 * The two pieces share the same drift signal (`snapshotKey()`
+	 * vs `presetSnapshotKey`), but they're applied independently — a
+	 * post-reload edit can fire (2) without (1) firing again
+	 * (active_preset_id is already null), and a user who hand-typed a
+	 * name *before* drifting the config will see (1) fire but (2)
+	 * silently no-op because origin === 'manual'.
 	 */
 	detectCustomisation(): void {
-		if (this.ui.active_preset_id === null) return;
-		if (this.snapshotKey() !== this.presetSnapshotKey) {
+		const drifted = this.snapshotKey() !== this.presetSnapshotKey;
+
+		// (1) Preset / Custom badge.
+		if (this.ui.active_preset_id !== null && drifted) {
+			this.ui = { ...this.ui, active_preset_id: null };
+		}
+
+		// (2) Auto-rename to 'custom'. Only fires while the name is
+		// still preset-provenanced; flipping origin to 'manual' here
+		// makes this a one-shot — further mutations leave 'custom'
+		// alone, and a user who renames after that gets normal
+		// manual-stem semantics.
+		if (this.ui.name_origin === 'preset' && drifted) {
 			this.ui = {
 				...this.ui,
-				active_preset_id: null,
-				config_name: sanitizeConfigFilenameStem('custom')
+				config_name: sanitizeConfigFilenameStem('custom'),
+				name_origin: 'manual'
 			};
+			this.presetSnapshotKey = '';
 		}
+	}
+
+	/**
+	 * Commit a user-typed configuration filename stem from the banner
+	 * input. Marks the name as `'manual'` so the auto-rename effect
+	 * stops touching it — only `applyPreset` can re-arm the
+	 * preset-provenance after this point. Sanitises the input on the
+	 * way in (same rules as download filenames).
+	 */
+	setUserConfigName(stem: string): void {
+		this.ui = {
+			...this.ui,
+			config_name: sanitizeConfigFilenameStem(stem),
+			name_origin: 'manual'
+		};
 	}
 
 	enabledFamilyIds(): string[] {

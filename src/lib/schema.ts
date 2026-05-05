@@ -263,6 +263,34 @@ export const uiSessionSchema = z.object({
 	/** Sanitised configuration file stem (no `.json` suffix; used for downloads). */
 	config_name: z.string().default('hlcl-build'),
 	/**
+	 * Provenance of `config_name`:
+	 *
+	 *   - `'preset'` — set by `applyPreset` to the preset's title. The
+	 *     auto-rename effect in `state.svelte.ts::detectCustomisation`
+	 *     watches for this and flips the name to `'custom'` (and the
+	 *     origin to `'manual'`) on the first edit that drifts the
+	 *     config away from the preset.
+	 *   - `'manual'` — everything else: the factory default
+	 *     (`'hlcl-build'`), an imported configuration, the post-flip
+	 *     `'custom'` state, and any name the user typed directly into
+	 *     the input on the configure page banner. While
+	 *     `name_origin === 'manual'`, the auto-rename effect leaves the
+	 *     name alone — only `applyPreset` can promote it back to
+	 *     `'preset'` (and thereby re-arm the auto-rename).
+	 *
+	 * Persisted alongside `config_name` so the contract survives a
+	 * reload: a user who applied a preset, closed the tab, reopened
+	 * it, and then tweaked a setting still sees the rename to
+	 * `'custom'` (whereas relying on the in-memory `active_preset_id`
+	 * — which `applyPersistedState` deliberately clears on hydrate —
+	 * silently drops that behaviour across reloads).
+	 *
+	 * Defaults to `'manual'` so localStorage envelopes from before
+	 * this field existed parse cleanly without spuriously triggering
+	 * the auto-rename.
+	 */
+	name_origin: z.enum(['preset', 'manual']).default('manual'),
+	/**
 	 * Cached library-stats from the most recent successful build, or
 	 * `null` if no build has run in this browser. Defaults to `null`
 	 * so existing localStorage envelopes from before this field
@@ -360,7 +388,12 @@ export function defaultBuildConfig(): BuildConfig {
 }
 
 export function defaultUiSession(): UiSession {
-	return { active_preset_id: null, config_name: 'hlcl-build', build_stats: null };
+	return {
+		active_preset_id: null,
+		config_name: 'hlcl-build',
+		name_origin: 'manual',
+		build_stats: null
+	};
 }
 
 export function defaultPersistedState(): PersistedState {

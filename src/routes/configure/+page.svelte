@@ -10,7 +10,6 @@
 	import GenerateTab from '$lib/components/tabs/GenerateTab.svelte';
 	import MigrateTab from '$lib/components/tabs/MigrateTab.svelte';
 	import { appState } from '$lib/state.svelte';
-	import { sanitizeConfigFilenameStem } from '$lib/config-filename';
 	let editingName = $state(false);
 	let editStem = $state('');
 
@@ -26,8 +25,12 @@
 
 	function commitConfigStem() {
 		if (!editingName) return;
-		const stem = sanitizeConfigFilenameStem(editStem);
-		appState.ui = { ...appState.ui, config_name: stem };
+		// Route through `setUserConfigName` so the name_origin gets
+		// flipped to 'manual' — that's what makes the user's typed
+		// stem durable through subsequent config edits (the auto-rename
+		// effect in `state.svelte.ts::detectCustomisation` only touches
+		// names whose origin is still 'preset').
+		appState.setUserConfigName(editStem);
 		editingName = false;
 	}
 
