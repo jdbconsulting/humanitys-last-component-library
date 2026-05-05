@@ -76,7 +76,18 @@
 		try {
 			const bytes = await readOutputBytes(file.path);
 			const blob = new Blob([bytes as BlobPart], { type: 'application/octet-stream' });
-			saveBlobAs(blob, file.path.replace(/\//g, '_'));
+			// Save under the file's basename, not its full output-relative path.
+			// The previous `path.replace(/\//g, '_')` produced names like
+			// `standards_standards.tex` and `standards_example-footprint.png`,
+			// which broke `\input{standards.tex}` / `\includegraphics{example-footprint}`
+			// inside the populated standards.tex once the user dropped the
+			// downloaded files next to each other on disk. Every output file
+			// the build emits has a unique basename across the tree (vendors
+			// are namespaced via `<mfg>-<family>`; everything in `standards/`
+			// has a unique name), so there's no collision risk in flattening
+			// to basename.
+			const filename = file.path.split('/').pop() ?? file.path;
+			saveBlobAs(blob, filename);
 			consoleLog.info(`Downloaded ${file.path} (${formatBytes(file.size)}).`);
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
