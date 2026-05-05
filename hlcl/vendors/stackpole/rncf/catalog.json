@@ -5,7 +5,7 @@
 	"summary": "Precision thin-film chip resistors (RNCF), 0.01% to 1%, 2-50 ppm/C, AEC-Q200, 0201-1206.",
 	"kind": "resistor",
 	"subtype_id": "thin-film",
-	"subtype_label": "Thin film (precision)",
+	"subtype_label": "Thin film",
 	"subtype_order": 20,
 	"sort_order": 20,
 	"available_sizes": ["0201", "0402", "0603", "0805", "1206"],

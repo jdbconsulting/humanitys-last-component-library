@@ -8,12 +8,48 @@
 			name="description"
 			content="Humanity's Last Component Library — generate IPC-7351B-compliant Altium passive component libraries in your browser. A JD Brinton Consulting tool."
 		/>
+
+		<!--
+			Social-share / Open Graph metadata. URLs MUST be absolute (the OG and
+			Twitter Card specs require it for previews to render). Production is
+			served at the apex `hlcl.jdbrinton.consulting` (see static/CNAME and
+			svelte.config.js — `base` is empty), so the canonical origin is
+			hard-coded here. We point at the 1200×630 banner in static/images/
+			(roughly 1.91:1) so Twitter renders the `summary_large_image` card
+			and Facebook / LinkedIn / Slack / Discord all show a large preview.
+		-->
+		<link rel="canonical" href="https://hlcl.jdbrinton.consulting/" />
+
+		<meta property="og:type" content="website" />
+		<meta property="og:site_name" content="Humanity's Last Component Library" />
+		<meta property="og:url" content="https://hlcl.jdbrinton.consulting/" />
 		<meta property="og:title" content="HLCL · Humanity's Last Component Library" />
 		<meta
 			property="og:description"
 			content="Correct-by-construction passive two-terminal chip library generator. A JD Brinton Consulting, Inc. tool."
 		/>
-		<meta property="og:type" content="website" />
+		<meta property="og:image" content="https://hlcl.jdbrinton.consulting/images/hlcl-logo-lg.png" />
+		<meta
+			property="og:image:secure_url"
+			content="https://hlcl.jdbrinton.consulting/images/hlcl-logo-lg.png"
+		/>
+		<meta property="og:image:type" content="image/png" />
+		<meta property="og:image:width" content="1200" />
+		<meta property="og:image:height" content="630" />
+		<meta property="og:image:alt" content="Humanity's Last Component Library logo" />
+
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:title" content="HLCL · Humanity's Last Component Library" />
+		<meta
+			name="twitter:description"
+			content="Correct-by-construction passive two-terminal chip library generator. A JD Brinton Consulting, Inc. tool."
+		/>
+		<meta
+			name="twitter:image"
+			content="https://hlcl.jdbrinton.consulting/images/hlcl-logo-lg.png"
+		/>
+		<meta name="twitter:image:alt" content="Humanity's Last Component Library logo" />
+
 		<link rel="preconnect" href="https://fonts.googleapis.com" />
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 		<link
