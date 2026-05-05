@@ -1,0 +1,84 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/forms';
+@plugin '@tailwindcss/typography';
+
+/*
+ * HLCL is a JD Brinton Consulting, Inc. (JDBC) tool, so the theme below
+ * mirrors jdbrinton.consulting:
+ *   - `navy-*` is JDBC's primary palette (deep blue → near-black @ navy-950).
+ *   - `accent-*` is JDBC's amber call-to-action palette.
+ *   - `ink-*` is the neutral slate scale we already use for body copy and
+ *     hairline borders.
+ *
+ * The naming matches the parent site's Tailwind theme so anything
+ * cross-referenced between the two reads identically.
+ */
+
+@theme {
+	--font-sans:
+		'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+		'Helvetica Neue', Arial, sans-serif;
+	--font-mono:
+		ui-monospace, 'SF Mono', 'Menlo', 'Monaco', 'Cascadia Mono', 'Roboto Mono', Consolas,
+		'Liberation Mono', monospace;
+
+	/* JDBC navy — the brand primary. Logo background is navy-900. */
+	--color-navy-50: #f0f4f9;
+	--color-navy-100: #d9e1ee;
+	--color-navy-200: #b3c3dd;
+	--color-navy-300: #8aa2c4;
+	--color-navy-400: #6082aa;
+	--color-navy-500: #3e6191;
+	--color-navy-600: #2c4571;
+	--color-navy-700: #1f3157;
+	--color-navy-800: #16223e;
+	--color-navy-900: #111b30;
+	--color-navy-950: #0a1120;
+
+	/* JDBC accent — amber CTAs. Matches Tailwind's amber palette. */
+	--color-accent-50: #fffbeb;
+	--color-accent-100: #fef3c7;
+	--color-accent-200: #fde68a;
+	--color-accent-300: #fcd34d;
+	--color-accent-400: #fbbf24;
+	--color-accent-500: #f59e0b;
+	--color-accent-600: #d97706;
+	--color-accent-700: #b45309;
+	--color-accent-800: #92400e;
+	--color-accent-900: #78350f;
+
+	/* Neutral slate scale for body copy and hairline borders. */
+	--color-ink-50: #f8fafc;
+	--color-ink-100: #f1f5f9;
+	--color-ink-200: #e2e8f0;
+	--color-ink-300: #cbd5e1;
+	--color-ink-400: #94a3b8;
+	--color-ink-500: #64748b;
+	--color-ink-600: #475569;
+	--color-ink-700: #334155;
+	--color-ink-800: #1e293b;
+	--color-ink-900: #0f172a;
+	--color-ink-950: #020617;
+}
+
+html {
+	background: var(--color-ink-50);
+	color: var(--color-ink-900);
+	-webkit-font-smoothing: antialiased;
+}
+
+body {
+	font-family: var(--font-sans);
+}
+
+::selection {
+	background: var(--color-accent-200);
+	color: var(--color-navy-900);
+}
+
+/* Subtle, professional focus ring for keyboard users. */
+:focus-visible {
+	outline: 2px solid var(--color-accent-500);
+	outline-offset: 2px;
+	border-radius: 6px;
+}

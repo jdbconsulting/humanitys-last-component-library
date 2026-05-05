@@ -1,14 +1,17 @@
 # TDK Library Notes
 
-## TDK Capacitors
+This folder is a per-family aggregator. Every active TDK generator
+lives in its own subfolder.
 
-The TDK capacitor workbook in this repository (`tdk.xls`) targets commercial-grade, general-purpose MLCCs (up to 75 VDC) with production status set to production.
+| Family | Folder | Build target | Notes |
+| --- | --- | --- | --- |
+| **CGA** (automotive MLCC) | [`cga/`](cga) | `python build.py tdk-capacitors` | TDK CGA automotive-grade MLCC; up to 75 VDC. Generator reads `cga/tdk_automotive_pn.csv`. |
 
-Current generator/input assets live in this folder:
+Stale per-tool data still parked at this level:
 
-- `tdk-capacitors.py`
-- `tdk.csv`
-- `tdk_automotive.csv`
-- `tdk_automotive_pn.csv`
+- `tdk.csv`, `tdk.xls` — older inputs no longer consumed by any
+  generator, retained for historical reference only. Safe to delete
+  when the project no longer needs them.
+- `History/` — historical DbLib snapshots; gitignored project-wide.
 
-Historical snapshots and vendor reference data are under `History/` and `reference/`.
+See [`cga/README.md`](cga/README.md) for per-family details.

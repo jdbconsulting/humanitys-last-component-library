@@ -24,17 +24,21 @@ with rounded edges; the function signatures here will not change.
 
 from __future__ import annotations
 
+from _house_settings import SETTINGS
+
 from . import colors
 from .doc import StepDoc, Rgb
 from .shapes import DEFAULT_FILLET_RADIUS_MM, filleted_box, sharp_box
 
 # RESC metallization thickness. Real chip resistors have ~50 um of
 # Ag/Pd/Sn plating on the end caps regardless of body size, so we
-# parameterise it as a fraction of H with a hard floor (so the wrap
-# stays visible on small 0402 chips) and a hard ceiling (so the
-# substrate keeps a reasonable sandwich thickness on big 1206 chips).
-RESC_METAL_THICKNESS_FRACTION = 0.10
-RESC_METAL_THICKNESS_FLOOR_MM = 0.02
+# parameterise it as a fraction of H (settings.toml [stepgen]) with
+# a hard floor (so the wrap stays visible on small 0402 chips) and a
+# hard ceiling (so the substrate keeps a reasonable sandwich
+# thickness on big 1206 chips). The ceiling is computed per-chip
+# inside resc() below.
+RESC_METAL_THICKNESS_FRACTION = SETTINGS.stepgen.resc_metal_thickness_fraction
+RESC_METAL_THICKNESS_FLOOR_MM = SETTINGS.stepgen.resc_metal_thickness_floor_mm
 
 
 def _validate(L: float, W: float, H: float, T: float, name: str) -> None:
@@ -313,7 +317,7 @@ def resc(
 
 
 def _default_name(prefix: str, L: float, W: float, H: float, T: float) -> str:
-    """Mirror the IPC-7351B name format from DDL-001 §6.1 (TYPELLWWXHH)
+    """Mirror the IPC-7351B name format from HLCL-001 §6.1 (TYPELLWWXHH)
     when the caller doesn't pass an explicit name. Useful when the
     generator is invoked directly from a Python REPL for ad-hoc 3D model
     inspection."""

@@ -98,9 +98,25 @@ class BinaryWriter:
     def write_c_string_param_block(self, params: Dict[str, str]) -> None:
         """``WriteBlock(w => w.WriteCString(ParametersToString(params)))``:
         u32 size prefix wrapping a null-terminated ``|KEY=VAL|...``
-        string. Used for component parameters, region/body parameter
-        blobs, and the library header."""
+        string. Used for the streams Altium emits with a leading
+        separator -- component Parameters, Library/Data, region
+        parameter blobs."""
         param_str = parameters_to_string(params)
+        with self.block():
+            self.write_c_string(param_str)
+
+    def write_c_string_param_block_no_leading_pipe(self, params: Dict[str, str]) -> None:
+        """Variant of ``write_c_string_param_block`` that emits the
+        parameter list *without* the leading ``|`` separator. Altium
+        uses this form for ComponentBody parameters and
+        Library/Models/Data entries: ``KEY1=VAL1|KEY2=VAL2|...`` with
+        the first ``|`` omitted. The two formats coexist in the same
+        file because Altium's reader tolerates both, but the
+        placement-time code path expects the no-leading-pipe form
+        when consuming embedded-3D-model metadata."""
+        param_str = parameters_to_string(params)
+        if param_str.startswith("|"):
+            param_str = param_str[1:]
         with self.block():
             self.write_c_string(param_str)
 

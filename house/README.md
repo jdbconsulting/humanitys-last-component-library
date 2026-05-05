@@ -1,13 +1,13 @@
 ﻿# The House Footprint Library
 
-This folder hosts the code that **autogenerates** the Altium footprint library (`build/house.PcbLib`) which every vendor DbLib in this repository links to (Panasonic, TDK, Samsung, Murata, …). The generated `house.PcbLib`, every intermediate STEP 3D model, and the merged footprint manifest all land in the repo's top-level `build/` directory (which is `.gitignore`d).
+This folder hosts the code that **autogenerates** the Altium footprint library (`build/output/house.PcbLib`) which every vendor DbLib in this repository links to (Panasonic, TDK, Samsung, Murata, …). The .PcbLib lands in `build/output/` (the user-facing tree); intermediate artifacts (per-vendor JSONs, the merged footprint manifest, parametric STEP 3D models) live under `build/intermediate/`. Both subtrees are .gitignore'd. See the top-level README's "Output layout" section for the rationale.
 
 The build pipeline is fully automated end-to-end — Altium's IPC Compliant Footprints Batch Generator is **not** in the loop:
 
-1. **Per-vendor footprint specifications.** Each `vendors/<vendor>/` script writes `build/footprints/<vendor>-footprints.json` listing every CAPC / RESC / INDC footprint × density variant (`L`, `N`, `M`) the vendor's database needs. Schema lives in [`vendors/_common.py`](../vendors/_common.py) and carries body geometry (`L × W × H`, terminal length `T`), the chip kind (C / R / I / FB), and a `drawingNote` source attribution traceable to a datasheet.
-2. **Merge.** [`build_house_footprints.py`](build_house_footprints.py) consolidates every per-vendor JSON into `build/footprints/house-footprints.json`. When two vendors define a row with the same `name`, the priority list in [`settings.toml`](../settings.toml) at the repo root breaks the tie.
-3. **Parametric STEP 3D models.** [`build_step_models.py`](build_step_models.py) reads the merged JSON and calls into the pure-Python geometry engine in [`stepgen/`](stepgen) to write one `build/step/<root>.step` per unique chip body. Because L / N / M density variants share an identical body, the generator dedupes by footprint root (e.g. `build/step/CAPC0402X20.step` is shared by `CAPC0402X20{L,N,M}`).
-4. **`.PcbLib` autogeneration.** The pure-Python writer under [`altium_pcblib/`](altium_pcblib) consumes both the merged JSON and the STEP files, applies IPC-7351B pad math + the DDL-001 drawing standards (rounded-rect 25%-radius pads, 0.05 mm solder mask expansion with a bridge region whenever the natural sliver would fall under 0.1 mm, 3D body on Mech 1, outline + centroid on Mech 15, no silkscreen, no courtyard, library default units = mm), and emits `build/house.PcbLib` with each STEP model embedded inline (zlib-compressed). The driver script is [`build_pcblib.py`](build_pcblib.py).
+1. **Per-vendor footprint specifications.** Each `vendors/<vendor>/` script writes `build/intermediate/footprints/<vendor>-footprints.json` listing every CAPC / RESC / INDC footprint × density variant (`L`, `N`, `M`) the vendor's database needs. Schema lives in [`vendors/_common.py`](../vendors/_common.py) and carries body geometry (`L × W × H`, terminal length `T`), the chip kind (C / R / I / FB), and a `drawingNote` source attribution traceable to a datasheet.
+2. **Merge.** [`build_house_footprints.py`](build_house_footprints.py) consolidates every per-vendor JSON into `build/intermediate/footprints/house-footprints.json`. When two vendors define a row with the same `name`, the priority list in [`settings.toml`](settings.toml) breaks the tie.
+3. **Parametric STEP 3D models.** [`build_step_models.py`](build_step_models.py) reads the merged JSON and calls into the pure-Python geometry engine in [`stepgen/`](stepgen) to write one `build/intermediate/step/<root>.step` per unique chip body. Because L / N / M density variants share an identical body, the generator dedupes by footprint root (e.g. `build/intermediate/step/CAPC0402X20.step` is shared by `CAPC0402X20{L,N,M}`).
+4. **`.PcbLib` autogeneration.** The pure-Python writer under [`altium_pcblib/`](altium_pcblib) consumes both the merged JSON and the STEP files, applies IPC-7351B pad math + the HLCL-001 drawing standards (rounded-rect 25%-radius pads, 0.05 mm solder mask expansion with a bridge region whenever the natural sliver would fall under 0.1 mm, 3D body on Mech 1, outline + centroid on Mech 15, no silkscreen, no courtyard, library default units = mm), and emits `build/output/house.PcbLib` with each STEP model embedded inline (zlib-compressed). The driver script is [`build_pcblib.py`](build_pcblib.py).
 
 Footprint names follow **IPC-SM-782**:
 
@@ -40,44 +40,44 @@ All three density variants (`L`, `N`, `M`) share the same nominal body dimension
 | Footprint | EIA (inch) | Nominal L × W × H, Tx (mm) | Authoritative dimension source | Families in this library that use it |
 | --- | --- | --- | --- | --- |
 | `CAPC0603X30{L,N,M}` | 0201 | 0.60 × 0.30 × 0.3, 0.15 | SAMSUNG **CL** + TDK **CGA** (shared geometry in both families) | SAMSUNG CL / TDK CGA |
-| `CAPC0603X33{L,N,M}` | 0201 | 0.60 × 0.30 × 0.33, 0.15 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/reference/murata_gcm.pdf`) | MURATA GCM |
-| `CAPC0603X39{L,N,M}` | 0201 | 0.60 × 0.30 × 0.39, 0.15 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/reference/murata_gcm.pdf`) | MURATA GCM |
-| `CAPC0603X55{L,N,M}` | 0201 | 0.60 × 0.30 × 0.55, 0.15 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/reference/murata_gcm.pdf`) | MURATA GCM |
+| `CAPC0603X33{L,N,M}` | 0201 | 0.60 × 0.30 × 0.33, 0.15 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/gcm/reference/murata_gcm.pdf`) | MURATA GCM |
+| `CAPC0603X39{L,N,M}` | 0201 | 0.60 × 0.30 × 0.39, 0.15 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/gcm/reference/murata_gcm.pdf`) | MURATA GCM |
+| `CAPC0603X55{L,N,M}` | 0201 | 0.60 × 0.30 × 0.55, 0.15 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/gcm/reference/murata_gcm.pdf`) | MURATA GCM |
 | `CAPC1005X50{L,N,M}` | 0402 | 1.00 × 0.50 × 0.5, 0.3 | SAMSUNG **CL** + TDK **CGA** (shared geometry in both families) | SAMSUNG CL / TDK CGA |
-| `CAPC1005X55{L,N,M}` | 0402 | 1.00 × 0.50 × 0.55, 0.3 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/reference/murata_gcm.pdf`) | MURATA GCM |
-| `CAPC1005X60{L,N,M}` | 0402 | 1.00 × 0.50 × 0.6, 0.3 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/reference/murata_gcm.pdf`) | MURATA GCM |
-| `CAPC1005X65{L,N,M}` | 0402 | 1.00 × 0.50 × 0.65, 0.3 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/reference/murata_gcm.pdf`) | MURATA GCM |
-| `CAPC1005X70{L,N,M}` | 0402 | 1.00 × 0.50 × 0.7, 0.3 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/reference/murata_gcm.pdf`) | MURATA GCM |
+| `CAPC1005X55{L,N,M}` | 0402 | 1.00 × 0.50 × 0.55, 0.3 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/gcm/reference/murata_gcm.pdf`) | MURATA GCM |
+| `CAPC1005X60{L,N,M}` | 0402 | 1.00 × 0.50 × 0.6, 0.3 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/gcm/reference/murata_gcm.pdf`) | MURATA GCM |
+| `CAPC1005X65{L,N,M}` | 0402 | 1.00 × 0.50 × 0.65, 0.3 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/gcm/reference/murata_gcm.pdf`) | MURATA GCM |
+| `CAPC1005X70{L,N,M}` | 0402 | 1.00 × 0.50 × 0.7, 0.3 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/gcm/reference/murata_gcm.pdf`) | MURATA GCM |
 | `CAPC1608X80{L,N,M}` | 0603 | 1.60 × 0.80 × 0.8, 0.35 | SAMSUNG **CL** + TDK **CGA** (shared geometry in both families) | SAMSUNG CL / TDK CGA |
-| `CAPC1608X90{L,N,M}` | 0603 | 1.60 × 0.80 × 0.9, 0.35 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/reference/murata_gcm.pdf`) | MURATA GCM |
-| `CAPC1608X100{L,N,M}` | 0603 | 1.60 × 0.80 × 1, 0.35 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/reference/murata_gcm.pdf`) | MURATA GCM |
+| `CAPC1608X90{L,N,M}` | 0603 | 1.60 × 0.80 × 0.9, 0.35 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/gcm/reference/murata_gcm.pdf`) | MURATA GCM |
+| `CAPC1608X100{L,N,M}` | 0603 | 1.60 × 0.80 × 1, 0.35 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/gcm/reference/murata_gcm.pdf`) | MURATA GCM |
 | `CAPC2012X60{L,N,M}` | 0805 | 2.00 × 1.25 × 0.6, 0.5 | TDK **CGA** | TDK CGA |
-| `CAPC2012X70{L,N,M}` | 0805 | 2.00 × 1.25 × 0.7, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/reference/murata_gcm.pdf`) | MURATA GCM |
+| `CAPC2012X70{L,N,M}` | 0805 | 2.00 × 1.25 × 0.7, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/gcm/reference/murata_gcm.pdf`) | MURATA GCM |
 | `CAPC2012X85{L,N,M}` | 0805 | 2.00 × 1.25 × 0.85, 0.5 | SAMSUNG **CL** + TDK **CGA** (shared geometry in both families) | SAMSUNG CL / TDK CGA |
-| `CAPC2012X95{L,N,M}` | 0805 | 2.00 × 1.25 × 0.95, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/reference/murata_gcm.pdf`) | MURATA GCM |
-| `CAPC2012X100{L,N,M}` | 0805 | 2.00 × 1.25 × 1, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/reference/murata_gcm.pdf`) | MURATA GCM |
+| `CAPC2012X95{L,N,M}` | 0805 | 2.00 × 1.25 × 0.95, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/gcm/reference/murata_gcm.pdf`) | MURATA GCM |
+| `CAPC2012X100{L,N,M}` | 0805 | 2.00 × 1.25 × 1, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/gcm/reference/murata_gcm.pdf`) | MURATA GCM |
 | `CAPC2012X125{L,N,M}` | 0805 | 2.00 × 1.25 × 1.25, 0.5 | SAMSUNG **CL** + TDK **CGA** (shared geometry in both families) | SAMSUNG CL / TDK CGA |
-| `CAPC2012X140{L,N,M}` | 0805 | 2.00 × 1.25 × 1.4, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/reference/murata_gcm.pdf`) | MURATA GCM |
-| `CAPC2012X145{L,N,M}` | 0805 | 2.00 × 1.25 × 1.45, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/reference/murata_gcm.pdf`) | MURATA GCM |
+| `CAPC2012X140{L,N,M}` | 0805 | 2.00 × 1.25 × 1.4, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/gcm/reference/murata_gcm.pdf`) | MURATA GCM |
+| `CAPC2012X145{L,N,M}` | 0805 | 2.00 × 1.25 × 1.45, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/gcm/reference/murata_gcm.pdf`) | MURATA GCM |
 | `CAPC3216X60{L,N,M}` | 1206 | 3.20 × 1.60 × 0.6, 0.5 | TDK **CGA** | TDK CGA |
 | `CAPC3216X85{L,N,M}` | 1206 | 3.20 × 1.60 × 0.85, 0.5 | SAMSUNG **CL** + TDK **CGA** (shared geometry in both families) | SAMSUNG CL / TDK CGA |
-| `CAPC3216X95{L,N,M}` | 1206 | 3.20 × 1.60 × 0.95, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/reference/murata_gcm.pdf`) | MURATA GCM |
-| `CAPC3216X100{L,N,M}` | 1206 | 3.20 × 1.60 × 1, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/reference/murata_gcm.pdf`) | MURATA GCM |
+| `CAPC3216X95{L,N,M}` | 1206 | 3.20 × 1.60 × 0.95, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/gcm/reference/murata_gcm.pdf`) | MURATA GCM |
+| `CAPC3216X100{L,N,M}` | 1206 | 3.20 × 1.60 × 1, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/gcm/reference/murata_gcm.pdf`) | MURATA GCM |
 | `CAPC3216X115{L,N,M}` | 1206 | 3.20 × 1.60 × 1.15, 0.5 | TDK **CGA** | TDK CGA |
-| `CAPC3216X125{L,N,M}` | 1206 | 3.20 × 1.60 × 1.25, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/reference/murata_gcm.pdf`) | MURATA GCM |
+| `CAPC3216X125{L,N,M}` | 1206 | 3.20 × 1.60 × 1.25, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/gcm/reference/murata_gcm.pdf`) | MURATA GCM |
 | `CAPC3216X160{L,N,M}` | 1206 | 3.20 × 1.60 × 1.6, 0.5 | SAMSUNG **CL** + TDK **CGA** (shared geometry in both families) | SAMSUNG CL / TDK CGA |
-| `CAPC3216X180{L,N,M}` | 1206 | 3.20 × 1.60 × 1.8, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/reference/murata_gcm.pdf`) | MURATA GCM |
-| `CAPC3216X190{L,N,M}` | 1206 | 3.20 × 1.60 × 1.9, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/reference/murata_gcm.pdf`) | MURATA GCM |
-| `CAPC3225X100{L,N,M}` | 1210 | 3.20 × 2.50 × 1, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/reference/murata_gcm.pdf`) | MURATA GCM |
-| `CAPC3225X125{L,N,M}` | 1210 | 3.20 × 2.50 × 1.25, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/reference/murata_gcm.pdf`) | MURATA GCM |
-| `CAPC3225X150{L,N,M}` | 1210 | 3.20 × 2.50 × 1.5, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/reference/murata_gcm.pdf`) | MURATA GCM |
+| `CAPC3216X180{L,N,M}` | 1206 | 3.20 × 1.60 × 1.8, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/gcm/reference/murata_gcm.pdf`) | MURATA GCM |
+| `CAPC3216X190{L,N,M}` | 1206 | 3.20 × 1.60 × 1.9, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/gcm/reference/murata_gcm.pdf`) | MURATA GCM |
+| `CAPC3225X100{L,N,M}` | 1210 | 3.20 × 2.50 × 1, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/gcm/reference/murata_gcm.pdf`) | MURATA GCM |
+| `CAPC3225X125{L,N,M}` | 1210 | 3.20 × 2.50 × 1.25, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/gcm/reference/murata_gcm.pdf`) | MURATA GCM |
+| `CAPC3225X150{L,N,M}` | 1210 | 3.20 × 2.50 × 1.5, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/gcm/reference/murata_gcm.pdf`) | MURATA GCM |
 | `CAPC3225X160{L,N,M}` | 1210 | 3.20 × 2.50 × 1.6, 0.5 | SAMSUNG **CL** + TDK **CGA** (shared geometry in both families) | SAMSUNG CL / TDK CGA |
 | `CAPC3225X200{L,N,M}` | 1210 | 3.20 × 2.50 × 2, 0.5 | SAMSUNG **CL** + TDK **CGA** (shared geometry in both families) | SAMSUNG CL / TDK CGA / MURATA GCM |
-| `CAPC3225X220{L,N,M}` | 1210 | 3.20 × 2.50 × 2.2, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/reference/murata_gcm.pdf`) | MURATA GCM |
+| `CAPC3225X220{L,N,M}` | 1210 | 3.20 × 2.50 × 2.2, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/gcm/reference/murata_gcm.pdf`) | MURATA GCM |
 | `CAPC3225X250{L,N,M}` | 1210 | 3.20 × 2.50 × 2.5, 0.5 | SAMSUNG **CL** + TDK **CGA** (shared geometry in both families) | SAMSUNG CL / TDK CGA |
-| `CAPC3225X265{L,N,M}` | 1210 | 3.20 × 2.50 × 2.65, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/reference/murata_gcm.pdf`) | MURATA GCM |
-| `CAPC3225X270{L,N,M}` | 1210 | 3.20 × 2.50 × 2.7, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/reference/murata_gcm.pdf`) | MURATA GCM |
-| `CAPC3225X285{L,N,M}` | 1210 | 3.20 × 2.50 × 2.85, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/reference/murata_gcm.pdf`) | MURATA GCM |
+| `CAPC3225X265{L,N,M}` | 1210 | 3.20 × 2.50 × 2.65, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/gcm/reference/murata_gcm.pdf`) | MURATA GCM |
+| `CAPC3225X270{L,N,M}` | 1210 | 3.20 × 2.50 × 2.7, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/gcm/reference/murata_gcm.pdf`) | MURATA GCM |
+| `CAPC3225X285{L,N,M}` | 1210 | 3.20 × 2.50 × 2.85, 0.5 | MURATA **GCM** (Murata PIM bulk list + `../vendors/murata/gcm/reference/murata_gcm.pdf`) | MURATA GCM |
 | `CAPC4532X160{L,N,M}` | 1812 | 4.50 × 3.20 × 1.6, 0.6 | TDK **CGA** | TDK CGA |
 | `CAPC4532X200{L,N,M}` | 1812 | 4.50 × 3.20 × 2, 0.6 | TDK **CGA** | TDK CGA |
 | `CAPC4532X230{L,N,M}` | 1812 | 4.50 × 3.20 × 2.3, 0.6 | TDK **CGA** | TDK CGA |
@@ -88,8 +88,8 @@ All three density variants (`L`, `N`, `M`) share the same nominal body dimension
 | `CAPC5750X250{L,N,M}` | 2220 | 5.70 × 5.00 × 2.5, 0.6 | TDK **CGA** | TDK CGA |
 ## Notes
 
-- **Resistors:** **0805** carries two height variants (`RESC2012X55` vs. `RESC2012X60`) because Panasonic's newer high-stability thin-film line (**ERA-V/K**) has a 0.55 mm body, while the **ERJ** thick-film line uses a 0.60 mm body at 0805. **1206** only carries the 0.55 mm variant (`RESC3216X55`) because we don't stock any 1206 thick-film parts; if a 1206 thick-film family (ERJ-8, ERA-8A, etc.) is ever added to the library, append a matching row to `vendors/panasonic/panasonic-resistors.py`'s `RESC_FOOTPRINTS` table and re-run `make all`.
+- **Resistors:** **0805** carries two height variants (`RESC2012X55` vs. `RESC2012X60`) because Panasonic's newer high-stability thin-film line (**ERA-V/K**) has a 0.55 mm body, while the **ERJ** thick-film line uses a 0.60 mm body at 0805. **1206** only carries the 0.55 mm variant (`RESC3216X55`) because we don't stock any 1206 thick-film parts; if a 1206 thick-film family (ERJ-8, ERA-8A, etc.) is ever added to the library, append a matching row to `vendors/panasonic/_panasonic_common.py`'s `RESC_BODIES` dict, list the new root in the appropriate per-family `FOOTPRINT_ROOTS`, and re-run `python build.py all`.
 - **Capacitors:** `Tx` above is the terminal/band length stored in `bodyMm.terminalLengthNominal` of each per-vendor JSON. `H` is the body max height (`bodyMm.heightNominal`).
-- The data tables above are reference documentation; the canonical list lives in `build/footprints/house-footprints.json` and is rebuilt on every `make all`.
-- **Adding a new footprint.** Edit (or add) the relevant `vendors/<vendor>/<vendor>-*.py` script so it emits a row for the new size, then run `make all`. Conflicts on `name` are resolved deterministically by [`settings.toml`](../settings.toml)'s priority list, so adding a duplicate-named footprint with a different geometry under a higher-priority vendor will override the existing one without a silent collision.
+- The data tables above are reference documentation; the canonical list lives in `build/intermediate/footprints/house-footprints.json` and is rebuilt on every `python build.py all`.
+- **Adding a new footprint.** Edit (or add) the relevant `vendors/<vendor>/<vendor>-*.py` script so it emits a row for the new size, then run `python build.py all`. Conflicts on `name` are resolved deterministically by [`settings.toml`](settings.toml)'s priority list, so adding a duplicate-named footprint with a different geometry under a higher-priority vendor will override the existing one without a silent collision.
 

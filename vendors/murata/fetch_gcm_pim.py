@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
 Fetch the full Murata GCM (automotive MLCC) orderable-parts list from
-Murata's PIM backend and save it as vendors/murata/gcm_parts.csv.
+Murata's PIM backend and save it as vendors/murata/gcm/gcm_parts.csv.
 
 This works around the 1,000-row cap on Murata's public PIM UI by calling
 the underlying REST endpoint that the SPA uses for its "Download CSV"
@@ -21,8 +21,10 @@ Usage:
     python vendors/murata/fetch_gcm_pim.py --part-prefix GRM          # fetch GRM series instead
     python vendors/murata/fetch_gcm_pim.py --output vendors/murata/other.csv  # different output path
 
-Output goes to vendors/murata/gcm_parts.csv by default (UTF-8 CSV, one row per
-orderable MPN, ~3 MB, ~5800 rows for GCM).
+Output goes to vendors/murata/gcm/gcm_parts.csv by default (UTF-8
+CSV, one row per orderable MPN, ~3 MB, ~5800 rows for GCM). Pass
+``--output vendors/murata/grm/grm_parts.csv`` (with ``--part-prefix
+GRM``) to refresh the GRM catalogue instead.
 
 Expect the HTTP POST to take roughly 60 seconds for the full GCM set;
 Murata's backend churns through the query synchronously.
@@ -37,15 +39,19 @@ import urllib.error
 import urllib.request
 
 DEFAULT_ENDPOINT = "https://pimapi.murata.com/public/api/pim/v1/products/search/part-numbers"
-DEFAULT_OUTPUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gcm_parts.csv")
+DEFAULT_OUTPUT = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "gcm", "gcm_parts.csv"
+)
 
 # The SPA's "Download CSV" button hard-codes this to 1000, which is the
-# UI cap the user hits. The backend itself honors higher values. Keeping
-# a comfortable margin above the current ~5800-part GCM universe.
-ACQUISITION_NUM = 10000
+# UI cap the user hits. The backend itself honors higher values; we
+# default to a margin above the current ~5800-part GCM universe and
+# allow the caller to bump it via --acquisition-num for larger
+# series (GRM exceeds 10000 today, hence the override flag).
+DEFAULT_ACQUISITION_NUM = 10000
 
 
-def build_request_body(part_prefix: str) -> dict:
+def build_request_body(part_prefix: str, acquisition_num: int) -> dict:
     """Match the JSON body shape the pim.murata.com SPA sends, observed
     by inspecting the minified bundle at
     /assets/entries/src_pages_pim_search.*.js. The fields below are the
@@ -57,7 +63,7 @@ def build_request_body(part_prefix: str) -> dict:
         "languageRegion": "en-us",
         "searchCondClass": 1,
         "series": "",
-        "acquisitionNum": ACQUISITION_NUM,
+        "acquisitionNum": acquisition_num,
         "sortKey": "",
         "valSearchCondList": [],
         "rangeValSearchCondList": [],
@@ -103,7 +109,7 @@ def main() -> int:
     parser.add_argument(
         "--output",
         default=DEFAULT_OUTPUT,
-        help="Destination CSV path (default: vendors/murata/gcm_parts.csv)",
+        help="Destination CSV path (default: vendors/murata/gcm/gcm_parts.csv)",
     )
     parser.add_argument(
         "--endpoint",
@@ -113,15 +119,28 @@ def main() -> int:
     parser.add_argument(
         "--timeout",
         type=float,
-        default=180.0,
-        help="Request timeout in seconds (default: 180; Murata's backend is slow)",
+        default=600.0,
+        help="Request timeout in seconds (default: 600; Murata's backend "
+             "can take several minutes for large series like GRM)",
+    )
+    parser.add_argument(
+        "--acquisition-num",
+        type=int,
+        default=DEFAULT_ACQUISITION_NUM,
+        help=(
+            "Cap on the number of parts to return in one request. "
+            f"Default: {DEFAULT_ACQUISITION_NUM}. The Murata PIM SPA "
+            "ships with 1000; the backend honours higher values. The "
+            "GCM series fits in 10000 but the GRM series exceeds it -- "
+            "pass --acquisition-num 50000 (or higher) for GRM."
+        ),
     )
     args = parser.parse_args()
 
-    body = build_request_body(args.part_prefix)
+    body = build_request_body(args.part_prefix, args.acquisition_num)
     print(
-        f"Fetching up to {ACQUISITION_NUM} {args.part_prefix}* parts from "
-        f"{args.endpoint} (this typically takes ~60s)...",
+        f"Fetching up to {args.acquisition_num} {args.part_prefix}* parts from "
+        f"{args.endpoint} (this typically takes 60-300s)...",
         file=sys.stderr,
     )
     t0 = time.time()
@@ -154,12 +173,12 @@ def main() -> int:
         file=sys.stderr,
     )
 
-    if row_count >= ACQUISITION_NUM:
+    if row_count >= args.acquisition_num:
         print(
             f"WARNING: row count ({row_count}) equals or exceeds the "
-            f"acquisitionNum cap ({ACQUISITION_NUM}). The returned data "
-            f"may be truncated; bump ACQUISITION_NUM in this script and "
-            f"re-run.",
+            f"acquisitionNum cap ({args.acquisition_num}). The returned "
+            f"data may be truncated; pass --acquisition-num with a "
+            f"larger value and re-run.",
             file=sys.stderr,
         )
         return 3

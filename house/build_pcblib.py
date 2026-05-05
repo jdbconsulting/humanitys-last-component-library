@@ -3,15 +3,16 @@
 Pure-Python replacement for ``house/HouseLibGenerator/`` (the C#
 project that previously produced ``build/house.PcbLib``).
 
-Reads the merged footprints JSON, applies IPC-7351B + DDL-001 math,
+Reads the merged footprints JSON, applies IPC-7351B + HLCL-001 math,
 and emits an Altium PCB footprint library with embedded zlib-
 compressed STEP 3D models -- functionally equivalent to what the C#
 generator produced, but with no .NET dependency.
 
 Usage:
-    python house/build_pcblib.py --input  build/footprints/house-footprints.json
-                                 --output build/house.PcbLib
-                                 --step-dir build/step
+    python house/build_pcblib.py \\
+        --input    build/intermediate/footprints/house-footprints.json \\
+        --output   build/output/house.PcbLib \\
+        --step-dir build/intermediate/step
 """
 
 from __future__ import annotations
@@ -28,7 +29,11 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 from altium_pcblib import PcbLibrary, PcbModel, write_pcblib  # noqa: E402
-from altium_pcblib.footprint import FootprintInput, build_chip_footprint  # noqa: E402
+from altium_pcblib.footprint import (  # noqa: E402
+    FootprintInput,
+    build_chip_footprint,
+    _deterministic_guid as _deterministic_guid_for_root,
+)
 
 
 def main(argv: Iterable[str] | None = None) -> int:
@@ -43,12 +48,25 @@ def main(argv: Iterable[str] | None = None) -> int:
         return 1
 
     components = []
-    models = []
+    models: list[PcbModel] = []
     diagnostics_lines: List[str] = []
-    embedded = 0
-    missing  = 0
-    step_cache: dict[str, str | None] = {}     # root -> step text or None
-    step_roots_used: set[str] = set()
+    missing = 0
+
+    # One PcbModel entry per *unique footprint root* (sans the L/N/M
+    # density letter). The 3 density variants of e.g. CAPC0402X20
+    # share the same 3D body, so they reference the same MODELID and
+    # the library carries only ONE embedded copy of CAPC0402X20.step
+    # rather than three identical copies.
+    #
+    # Without this dedup, Altium's general model-resolution code
+    # (used by the Components pane and PcbDoc placement -- everywhere
+    # except the PcbLib editor's dedicated 3D View) collapses
+    # entries that share a NAME and a CHECKSUM into one cached
+    # model, and only the body whose MODELID happened to match the
+    # winner of that dedup actually resolves. Every other body falls
+    # through to an extruded polygon-outline placeholder.
+    root_models: dict[str, PcbModel] = {}     # root -> PcbModel
+    root_step_cache: dict[str, str | None] = {}
 
     # Per-family counters for the build summary (mirrors the C# tool).
     by_kind = {"C": 0, "R": 0, "I": 0, "FB": 0}
@@ -59,46 +77,41 @@ def main(argv: Iterable[str] | None = None) -> int:
         if diag:
             diagnostics_lines.append(diag)
 
-        # STEP files are keyed by footprint *root* (name minus the
-        # trailing L/N/M density letter), matching what
-        # build_step_models.py emits: 3 density variants share a
-        # single .step body. Cache to read each file at most once.
         root = fp_input.name[:-1]
-        if root not in step_cache:
+
+        # Read STEP for this root if we haven't yet.
+        if root not in root_step_cache:
             step_path = os.path.join(args.step_dir, f"{root}.step")
             if os.path.exists(step_path):
                 with open(step_path, "r", encoding="utf-8") as sf:
-                    step_cache[root] = sf.read()
+                    root_step_cache[root] = sf.read()
             else:
-                step_cache[root] = None
-        step_text = step_cache[root]
-        if step_text is not None:
-            embedded += 1
-            step_roots_used.add(root)
-        else:
+                root_step_cache[root] = None
+        step_text = root_step_cache[root]
+        if step_text is None:
             step_text = ""
             missing += 1
 
-        # The model id must match the body's MODELID -- the body
-        # builder derived it deterministically from the footprint
-        # name; do the same here for the model entry.
-        body_model_id = component.component_bodies[0].model_id
-        models.append(
-            PcbModel(
-                id=body_model_id,
-                name="ChipBody.STEP",
-                is_embedded=True,
-                rotation_x=0.0,
-                rotation_y=0.0,
-                rotation_z=0.0,
-                dz=1,                  # v1.0.2 0-coord workaround sentinel
-                checksum=0,
-                model_source="",
+        # Create a single PcbModel per root (first time we see it),
+        # and rewrite this body's MODELID to point at that shared
+        # model. This makes 3 density variants of the same footprint
+        # share one Library/Models entry instead of having three
+        # near-identical ones.
+        if root not in root_models:
+            shared_model_id = _deterministic_guid_for_root(root)
+            root_models[root] = PcbModel(
+                id=shared_model_id,
+                name=f"{root}.step",
                 step_data=step_text,
             )
-        )
+        shared_model = root_models[root]
+        component.component_bodies[0].model_id = shared_model.id
+
         components.append(component)
         by_kind[fp_input.kind] = by_kind.get(fp_input.kind, 0) + 1
+
+    models = list(root_models.values())
+    embedded = sum(3 for m in models if m.step_data)  # 3 density variants per root
 
     library = PcbLibrary(components=components, models=models)
     os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
@@ -110,10 +123,12 @@ def main(argv: Iterable[str] | None = None) -> int:
     print(f"  By kind: " + "  ".join(
         f"{k}: {by_kind[k]}" for k in ("C", "R", "I", "FB") if by_kind.get(k)
     ), file=sys.stderr)
+    n_unique_models = len(models)
     print(
-        f"  3D models: {embedded} embedded ({len(step_roots_used)} unique "
-        f".step files from {args.step_dir}/, shared across L/N/M density "
-        f"variants), {missing} missing",
+        f"  3D models: {n_unique_models} unique embedded entries "
+        f"in Library/Models (one per footprint root, shared across "
+        f"L/N/M density variants of that root); {missing} missing "
+        f".step files in {args.step_dir}/",
         file=sys.stderr,
     )
     if diagnostics_lines:

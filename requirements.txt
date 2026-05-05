@@ -1,6 +1,7 @@
 # Runtime dependencies for the per-vendor generator scripts and the
 # house-footprints merge under house/. Python 3.11+ is required (the
-# merge script imports the stdlib `tomllib` module to read settings.toml).
+# merge script imports the stdlib `tomllib` module to read
+# house/settings.toml).
 #
 # `xlwt` is the only third-party dep -- the per-vendor scripts use it
 # to write the database `.xls` files that Altium's DbLib reads.

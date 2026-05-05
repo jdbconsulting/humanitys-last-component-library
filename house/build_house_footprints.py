@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
-Merge every per-vendor ``build/footprints/<vendor>-footprints.json``
-into a single ``build/footprints/house-footprints.json``.
+Merge every per-vendor ``build/intermediate/footprints/<vendor>-footprints.json``
+into a single ``build/intermediate/footprints/house-footprints.json``.
 
 This is the canonical input to two downstream pipeline steps:
 
@@ -17,7 +17,7 @@ When two or more vendor JSONs define a row with the same ``name``
 (e.g. SAMSUNG CL and TDK CGA both define ``CAPC1005X50N`` because the
 body geometry is shared between the two families), the row from the
 vendor that appears first in ``house_footprints.priority`` in
-``settings.toml`` (at the repo root) wins. Losing rows are dropped; a
+``house/settings.toml`` wins. Losing rows are dropped; a
 per-conflict tally and a list of any vendor JSONs not mentioned in
 the priority list are printed to stderr.
 
@@ -31,7 +31,7 @@ Inputs (per-vendor):
 
     {
       "schemaVersion": 1,
-      "vendor": "panasonic-resistors",
+      "vendor": "panasonic-erj",
       "footprints": [
         {"name": "...", "kind": "...", "density": "...",
          "drawingNote": "...", "bodyMm": {...}},
@@ -54,8 +54,9 @@ Usage
 -----
     python house/build_house_footprints.py
 
-Run *after* every per-vendor generator script has been re-run; the
-Makefile's ``house-footprints`` target chains the dependency for you.
+Run *after* every per-vendor generator script has been re-run;
+``python build.py house-footprints`` chains the dependency for you
+via its ``@vendors`` pseudo-dep.
 """
 
 from __future__ import annotations
@@ -69,8 +70,10 @@ from typing import Iterable, Tuple
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.normpath(os.path.join(HERE, ".."))
-SETTINGS_PATH = os.path.join(REPO_ROOT, "settings.toml")
-FOOTPRINTS_DIR = os.path.join(REPO_ROOT, "build", "footprints")
+SETTINGS_PATH = os.path.join(HERE, "settings.toml")
+# Per-vendor + merged JSONs are intermediates: nothing user-facing reads
+# them, they only feed the STEP and .PcbLib generators downstream.
+FOOTPRINTS_DIR = os.path.join(REPO_ROOT, "build", "intermediate", "footprints")
 OUTPUT_PATH = os.path.join(FOOTPRINTS_DIR, "house-footprints.json")
 
 VENDOR_SUFFIX = "-footprints.json"

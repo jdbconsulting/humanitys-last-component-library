@@ -127,7 +127,7 @@ class StepDoc:
     # Class-level constants used in the header
     PREPROCESSOR_VERSION = "house/stepgen 1.0"
     ORIGINATING_SYSTEM   = "HouseLibGenerator"
-    AUTHOR_NAME          = "DD Labs"
+    AUTHOR_NAME          = "Humanity's Last Component Library"
     SCHEMA_NAME          = "AUTOMOTIVE_DESIGN { 1 0 10303 214 1 1 1 1 }"
 
     def __init__(self, name: str):

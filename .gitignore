@@ -260,6 +260,13 @@ venv/
 ## Generated Files
 #################
 
+# Everything generated lives under build/. The tree is split into
+# two subdirs the build pipeline maintains:
+#   build/intermediate/  -- per-vendor footprints JSONs, the merged
+#                           house-footprints.json, parametric .step
+#                           models, pdflatex aux/log files
+#   build/output/        -- user-facing .xls / .DbLib / .PcbLib /
+#                           .SchLib / standards/HLCL-001.pdf
 build
 
 #################

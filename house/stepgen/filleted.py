@@ -59,11 +59,15 @@ from __future__ import annotations
 
 from typing import Dict, FrozenSet, List, Tuple
 
+from _house_settings import SETTINGS
+
 from .doc import StepDoc, Vec3
 
-#: Default fillet radius (matches Altium IPC LP Wizard for chip
-#: components). Always clamped per-call to ``min(L, W, H) / 4``.
-DEFAULT_FILLET_RADIUS_MM = 0.05
+#: Default fillet radius for the chip-body B-rep, sourced from
+#: ``settings.toml`` [stepgen]. Default 0.05 mm matches Altium's IPC
+#: LP Wizard. Always clamped per-call to ``min(L, W, H) / 4`` so it
+#: never eats more than 1/4 of any extent on tiny chips.
+DEFAULT_FILLET_RADIUS_MM = SETTINGS.stepgen.default_fillet_radius_mm
 
 
 # ---------------------------------------------------------------------------

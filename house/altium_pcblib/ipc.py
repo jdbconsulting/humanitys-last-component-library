@@ -15,14 +15,24 @@ from __future__ import annotations
 from dataclasses import dataclass
 from math import sqrt
 
+from _house_settings import SETTINGS
 
-# ----- Tolerances, fixed by IPC-7351B §3.1.4 SOIC worked example -----
+
+# ----- Tolerances, sourced from settings.toml [ipc] -----------------
+#
+# Defaults follow the IPC-7351B §3.1.4 SOIC worked example (F = 0.10
+# mm, P = 0.05 mm), but they are tunable per repo so a designer can
+# tighten them to match a known-good fab + assembly partner pair.
+#
+# Bound at module-import time -- altering settings.toml requires
+# re-running the build, which is consistent with how every other
+# parameter in this writer is consumed.
 
 #: Fabrication tolerance F, mm.
-FABRICATION_TOLERANCE_MM = 0.10
+FABRICATION_TOLERANCE_MM = SETTINGS.ipc.fabrication_tolerance_mm
 
 #: Placement tolerance P, mm.
-PLACEMENT_TOLERANCE_MM = 0.05
+PLACEMENT_TOLERANCE_MM = SETTINGS.ipc.placement_tolerance_mm
 
 
 # ----- Per-density rule rows ----------------------------------------

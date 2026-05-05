@@ -1,4 +1,4 @@
-# The Be-Done-With-It-Passives Footprint Library
+# Humanity's Last Footprint Library
 
 Are you tired of messing around with passive footprints? Want to get an Altium footprint library that does it correctly? This library is for you!
 
@@ -73,7 +73,7 @@ Notes:
 
 The build has a single host-side prerequisite:
 
-**Python 3.11+** — the per-vendor generator scripts, the `house-footprints` merge, the parametric STEP generator, and the `.PcbLib` writer are all Python. 3.11 is the floor because the merge reads `settings.toml` via the stdlib `tomllib`. The only third-party dependency pinned in [`requirements.txt`](requirements.txt) is `xlwt` (writes the database `.xls` files Altium's DbLib reads). Everything else — the per-vendor footprints JSONs, the merge, the STEP geometry engine, the MS-CFB v3 container writer, and the AltiumSharp v1.0.2-compatible record writer — is pure stdlib.
+**Python 3.11+** — the per-vendor generator scripts, the `house-footprints` merge, the parametric STEP generator, and the `.PcbLib` writer are all Python. 3.11 is the floor because the merge reads `house/settings.toml` via the stdlib `tomllib`. The only third-party dependency pinned in [`requirements.txt`](requirements.txt) is `xlwt` (writes the database `.xls` files Altium's DbLib reads). Everything else — the per-vendor footprints JSONs, the merge, the STEP geometry engine, the MS-CFB v3 container writer, and the AltiumSharp v1.0.2-compatible record writer — is pure stdlib.
 
 > Earlier versions of this repo used a small C# project (under `house/HouseLibGenerator/`, since deleted) that wrapped the [`OriginalCircuit.AltiumSharp`](https://www.nuget.org/packages/OriginalCircuit.AltiumSharp) NuGet package to emit the `.PcbLib`. That dependency, plus its transitive .NET 8 SDK requirement, has been replaced by the pure-Python writer in [`house/altium_pcblib/`](house/altium_pcblib). Output is byte-stable across runs (same MD5 every build) and structurally identical to what the C# tool produced (verified end-to-end against AltiumSharp's reader on a 168-footprint reference library).
 
@@ -97,65 +97,84 @@ py -3.12 -m venv .venv
 pip install -r requirements.txt
 ```
 
-Once the venv is activated, plain `python` resolves to the venv's interpreter, so the default `make` recipes work without any override.
+Once the venv is activated, plain `python` resolves to the venv's interpreter, so `python build.py` Just Works.
 
 ### One-shot
 
 After the Python venv is activated:
 
 ```bash
-make all
+python build.py
 ```
 
-If you'd rather not activate the venv (or you want to use a system Python), pass an override to `make` — see [Building with make](#building-with-make) below.
+(Bare `python build.py` is the same as `python build.py all`.) If you'd rather not activate the venv, point at it explicitly: `.venv/bin/python build.py` on Linux/macOS/WSL, or `.venv\Scripts\python build.py` on Windows.
 
-> **WSL note — `Permission denied` on `make clean`**
+> **WSL note — `Permission denied` on `python build.py clean`**
 >
-> When the project lives on a Windows drive (e.g. `/mnt/d/...`) and any of the `build/*.xls` database workbooks or `build/house.PcbLib` are open on the Windows side (Excel on the workbooks, Altium on the .PcbLib), `rm` from inside WSL can't delete them and `make clean` aborts. Close the offending app and re-run.
+> When the project lives on a Windows drive (e.g. `/mnt/d/...`) and any of the `build/output/*.xls` database workbooks or `build/output/house.PcbLib` are open on the Windows side (Excel on the workbooks, Altium on the .PcbLib), the `clean` step can't unlink them and aborts. Close the offending app and re-run.
 
-## Building with make
+## Output layout
 
-Use the project `Makefile` to run generators consistently:
+Everything generated lives under a single `build/` directory (which is `.gitignore`d). The tree is split into two top-level subdirectories with mutually-exclusive purposes:
 
-- `make` or `make all` - build everything (vendor `.xls`s + per-vendor footprint JSONs + merged JSON + 3D STEP models + `build/house.PcbLib`)
-- `make panasonic` - build `build/panasonic-resistors.{xls,DbLib}` + `build/footprints/panasonic-resistors-footprints.json`
-- `make tdk-capacitors` - build `build/tdk-capacitors.{xls,DbLib}` + matching footprints JSON
-- `make samsung-capacitors` - build `build/samsung-capacitors.{xls,DbLib}` + matching footprints JSON
-- `make murata-capacitors` - build `build/murata-capacitors.{xls,DbLib}` + matching footprints JSON
-- `make murata-ferrites` - run the placeholder Murata ferrite generator
-- `make house-footprints` - merge per-vendor footprints JSONs into `build/footprints/house-footprints.json`
-- `make house-step-models` - generate parametric 3D STEP models in `build/step/*.step` via `house/stepgen/`
-- `make house-pcblib` - autogenerate `build/house.PcbLib` from the merged JSON + STEP models (calls into `house/altium_pcblib/`, the pure-Python writer)
-- `make clean` - remove every procedurally-generated file from `build/`
+| Directory | Contents | Audience |
+| --- | --- | --- |
+| `build/output/` | `.xls` databases, matching `.DbLib` files, `house.PcbLib`, `house.SchLib`, `standards/HLCL-001.pdf` | **You.** This is what you point Altium at, ship to colleagues, or commit to a downstream library repo. |
+| `build/intermediate/` | per-vendor footprints JSONs, the merged `house-footprints.json`, parametric `.step` 3D models, pdflatex aux/log/toc files | The build chain itself. Nothing user-facing reads these. Safe to ignore unless you're debugging the generator. |
 
-You can override the Python launcher if you don't want to activate the venv created in [Setup](#setup), or when the system `python` isn't 3.11+:
+Every Python generator writes its user-facing artifacts directly into `build/output/`; there is no copy or stage step, and **no parallel copy of any user-facing file lives in `build/intermediate/`**. So if a file shows up in `build/output/`, it's the deliverable; no need to wonder which directory the "real" copy is in.
 
-- `make PYTHON=py all` (Windows Python launcher)
-- `make PYTHON=python3.12 all` (Linux/macOS without an activated venv)
-- `make PYTHON=.venv/bin/python all` (point directly at a non-activated venv)
+The per-vendor `.DbLib` files use `LibrarySearchPath=.` (their own directory) for `house.SchLib` / `house.PcbLib` lookups, so a `build/output/` copied / committed elsewhere as a unit keeps resolving correctly.
+
+## Building with `build.py`
+
+The repo ships a single Python build orchestrator at [`build.py`](build.py). It runs every generator in-process (no `subprocess`, no `make`) so the same code drives the build from a host shell today and from [Pyodide](https://pyodide.org) in the browser tomorrow. It auto-discovers per-family generators by globbing every `vendors/*/*/_build.py` (and `house/*/_build.py`); a new family just needs to drop in its own `_build.py` stub.
+
+- `python build.py` or `python build.py all` - build everything (vendor `.xls`s in `build/output/` + per-vendor footprint JSONs in `build/intermediate/footprints/` + merged JSON + 3D STEP models in `build/intermediate/step/` + `build/output/house.PcbLib` + `build/output/house.SchLib`)
+- `python build.py panasonic-erj` - build `build/output/panasonic-erj.{xls,DbLib}` + matching `build/intermediate/footprints/panasonic-erj-footprints.json` (Panasonic ERJ thick-film, 01005-0805)
+- `python build.py panasonic-era-a` - build `build/output/panasonic-era-a.{xls,DbLib}` + matching footprints JSON (ERA-A thin-film, 0201 only)
+- `python build.py panasonic-era-v` - build `build/output/panasonic-era-v.{xls,DbLib}` + matching footprints JSON (ERA-V/K thin-film high-stability, 0402-0805)
+- `python build.py panasonic-era-p` - build `build/output/panasonic-era-p.{xls,DbLib}` + matching footprints JSON (ERA-P 500V thin-film, 1206)
+- `python build.py panasonic` - convenience aggregate that builds all four `panasonic-*` family targets above (auto-derived from any 2+ family targets that share a manufacturer prefix)
+- `python build.py tdk-capacitors` - build `build/output/tdk-capacitors.{xls,DbLib}` + matching footprints JSON
+- `python build.py samsung-capacitors` - build `build/output/samsung-capacitors.{xls,DbLib}` + matching footprints JSON
+- `python build.py murata-gcm` - build `build/output/murata-gcm.{xls,DbLib}` (Murata GCM, automotive-qualified MLCC) + matching footprints JSON
+- `python build.py murata-grm` - build `build/output/murata-grm.{xls,DbLib}` (Murata GRM, commercial / general-purpose MLCC) + matching footprints JSON
+- `python build.py murata-ferrites` - run the Murata BLM-series ferrite-bead generator (`build/output/murata-ferrite.{xls,DbLib}`)
+- `python build.py murata` - aggregate that builds all three `murata-*` family targets above
+- `python build.py ohmite-kdv` - build `build/output/ohmite-kdv.{xls,DbLib}` (Ohmite KDV, metal-film current-sense resistors) + matching footprints JSON
+- `python build.py house-footprints` - merge per-vendor footprints JSONs into `build/intermediate/footprints/house-footprints.json` (transitively builds every vendor target first)
+- `python build.py house-step-models` - generate parametric 3D STEP models in `build/intermediate/step/*.step` via `house/stepgen/`
+- `python build.py house-pcblib` - autogenerate `build/output/house.PcbLib` from the merged JSON + STEP models (calls into `house/altium_pcblib/`, the pure-Python writer)
+- `python build.py house-schlib` - copy the hand-maintained `house.SchLib` into `build/output/`
+- `python build.py standards` - typeset `docs/standards/HLCL-001.tex` into `build/output/standards/HLCL-001.pdf` via two `pdflatex` passes. Excluded from `all` because pdflatex is a heavy host-side dep most users don't have, and as a subprocess it can't run inside Pyodide. Override the engine via the `HLCL_PDFLATEX` env var.
+- `python build.py clean` - remove the entire `build/` tree (both `intermediate/` and `output/`) plus any `__pycache__/` directories under `vendors/` and `house/`
+- `python build.py --list` - print every registered target
+
+> **Adding a vendor / family.** Each vendor folder under `vendors/<mfg>/<family>/` (and each `house/<component>/` subfolder) has its own `_build.py` stub that `build.py` picks up via wildcard glob. To add a new family: `mkdir vendors/<mfg>/<family>`, drop in your generator script + a 10-line `_build.py` that calls `register(...)`, then add the vendor key to `house/settings.toml`'s `house_footprints.priority`. No edits to `build.py` required. See any existing `vendors/*/*/_build.py` for the template.
 
 # Regenerating the Databases
 
-Each vendor has a Python script under `vendors/<name>/` (e.g. `vendors/panasonic/panasonic-resistors.py`, `vendors/tdk/tdk-capacitors.py`) that emits two artifacts per script:
+Each vendor family has a Python script under `vendors/<mfg>/<family>/` (e.g. `vendors/panasonic/erj/panasonic-erj.py`, `vendors/tdk/cga/tdk-capacitors.py`, `vendors/murata/gcm/murata-gcm.py`) that emits two artifacts per script:
 
-1. `build/<vendor>.xls` — the database workbook the vendor's `*.DbLib` binds to (one row per MPN). Excel 97-2003 BIFF8 written via `xlwt`.
-2. `build/footprints/<vendor>-footprints.json` — the per-vendor footprint specification: one entry per unique CAPC / RESC footprint × density variant (`L`, `N`, `M`) the database above references. Each entry carries body geometry (`L × W × H`, terminal length `T`), a `kind` field (C / R / I / FB), and a `drawingNote` source attribution (e.g. _"Dimensions from Panasonic ERJ-XGN (01005 thick film)"_). The schema is defined and validated in [`vendors/_common.py`](vendors/_common.py).
+1. `build/output/<vendor>.xls` — the database workbook the vendor's `*.DbLib` binds to (one row per MPN). Excel 97-2003 BIFF8 written via `xlwt`. User-facing.
+2. `build/intermediate/footprints/<vendor>-footprints.json` — the per-vendor footprint specification: one entry per unique CAPC / RESC footprint × density variant (`L`, `N`, `M`) the database above references. Each entry carries body geometry (`L × W × H`, terminal length `T`), a `kind` field (C / R / I / FB), and a `drawingNote` source attribution (e.g. _"Dimensions from Panasonic ERJ-XGN (01005 thick film)"_). The schema is defined and validated in [`vendors/_common.py`](vendors/_common.py). Intermediate; consumed by the merge / STEP / .PcbLib steps.
 
-Once every per-vendor script has run, `house/build_house_footprints.py` (wired into `make all` via the `house-footprints` target) merges every `build/footprints/*-footprints.json` into a single `build/footprints/house-footprints.json` — the canonical input for both the STEP 3D model generator and the .PcbLib autogenerator. When two vendor JSONs define a row with the same `name` (e.g. Samsung CL and TDK CGA both define `CAPC1005X50N`), the merge breaks ties using the priority list in [`settings.toml`](settings.toml) at the repo root — the vendor that appears first wins. The merge logs every conflict it resolves on stderr.
+Once every per-vendor script has run, `house/build_house_footprints.py` (wired into `python build.py all` via the `house-footprints` target, whose `@vendors` pseudo-dep transitively depends on every registered vendor target) merges every `build/intermediate/footprints/*-footprints.json` into a single `build/intermediate/footprints/house-footprints.json` — the canonical input for both the STEP 3D model generator and the .PcbLib autogenerator. When two vendor JSONs define a row with the same `name` (e.g. Samsung CL and TDK CGA both define `CAPC1005X50N`), the merge breaks ties using the priority list in [`house/settings.toml`](house/settings.toml) — the vendor that appears first wins. The merge logs every conflict it resolves on stderr.
 
-> **Adding a new vendor.** Drop a script under `vendors/<vendor>/` that calls `_common.write_footprints_json` with the unique CAPC/RESC/INDC footprints it requires (the existing scripts are good templates). Add the JSON path to the Makefile's `VENDOR_FOOTPRINT_JSON` list and the merge step picks it up automatically. Add the vendor key to `settings.toml`'s `house_footprints.priority` to control tie-break behaviour.
+> **Adding a new vendor.** Drop a script under `vendors/<mfg>/<family>/` that calls `_common.write_footprints_json` with the unique CAPC/RESC/INDC footprints it requires (the existing scripts are good templates), and a 10-line `_build.py` stub next to it that calls `build.register(...)`. `build.py` picks up every `vendors/*/*/_build.py` via wildcard glob, so no top-level edit is needed. Add the vendor key to `house/settings.toml`'s `house_footprints.priority` to control tie-break behaviour.
 
-## Autogenerating 3D STEP models (`build/step/*.step`)
+## Autogenerating 3D STEP models (`build/intermediate/step/*.step`)
 
-`make house-step-models` (in `make all`) runs [`house/build_step_models.py`](house/build_step_models.py) which delegates to the geometry engine in [`house/stepgen/`](house/stepgen). The IPC-7351B density variants (`L` / `N` / `M`) only change the pad geometry — the component body itself is identical — so the generator deduplicates by *footprint root* (FootprintName minus its trailing density letter) and emits **one STEP per unique chip body**:
+`python build.py house-step-models` (also pulled in by `python build.py all`) runs [`house/build_step_models.py`](house/build_step_models.py) which delegates to the geometry engine in [`house/stepgen/`](house/stepgen). The IPC-7351B density variants (`L` / `N` / `M`) only change the pad geometry — the component body itself is identical — so the generator deduplicates by *footprint root* (FootprintName minus its trailing density letter) and emits **one STEP per unique chip body**:
 
 ```
-build/step/CAPC0402X20.step    ← shared by CAPC0402X20{L,N,M}
-build/step/RESC0402X13.step    ← shared by RESC0402X13{L,N,M}
+build/intermediate/step/CAPC0402X20.step  ← shared by CAPC0402X20{L,N,M}
+build/intermediate/step/RESC0402X13.step  ← shared by RESC0402X13{L,N,M}
 ...
 ```
 
-The C# .pcblib autogenerator strips the same density suffix when looking up each footprint's STEP file, so all three density variants in `build/house.PcbLib` reference (and zlib-embed) the same STEP body. After `make all`, no external STEP files are required for the .PcbLib to render in Altium — but the on-disk copies are kept for inspection in any STEP viewer.
+The .pcblib autogenerator strips the same density suffix when looking up each footprint's STEP file, so all three density variants in `build/output/house.PcbLib` reference (and zlib-embed) the same STEP body. After `python build.py all`, no external STEP files are required for the .PcbLib to render in Altium — the STEP files in `build/intermediate/step/` are kept around solely so a human can pop one open in any STEP viewer to spot-check the geometry.
 
 The generator is intentionally **pure-stdlib Python** — no CadQuery, no FreeCAD, no OpenCASCADE bindings — for two reasons:
 
@@ -174,13 +193,13 @@ CAPC and INDC bodies use a 26-face filleted-box B-rep (6 main planes + 12 cylind
 
 RESC stays sharp-edged (no fillets) and instead uses a layered geometry that mirrors a real chip resistor: each "C"-shaped terminal is built from three flush sub-boxes (end-cap + top wrap + bottom wrap) so the terminal wraps around the substrate; the alumina substrate sits between the two C-terminals raised off the floor by the metallisation thickness; the passivation cover fills the top sandwich slot, flush with the terminal tops.
 
-## Autogenerating `build/house.PcbLib`
+## Autogenerating `build/output/house.PcbLib`
 
-`make house-pcblib` (also wired into `make all`) runs [`house/build_pcblib.py`](house/build_pcblib.py), the driver script for the pure-Python writer in [`house/altium_pcblib/`](house/altium_pcblib). It turns the JSON sidecar plus the parametric STEP files into `build/house.PcbLib` directly — no Altium IPC Batch Generator round-trip, no manual per-footprint tweaks, no .NET dependency. The writer applies:
+`python build.py house-pcblib` (also pulled in by `python build.py all`) runs [`house/build_pcblib.py`](house/build_pcblib.py), the driver script for the pure-Python writer in [`house/altium_pcblib/`](house/altium_pcblib). It turns the JSON sidecar plus the parametric STEP files into `build/output/house.PcbLib` directly — no Altium IPC Batch Generator round-trip, no manual per-footprint tweaks, no .NET dependency. The writer applies:
 
 - **IPC-7351B Tables 3-5/3-6 pad math** — toe `J_T`, heel `J_H`, side `J_S`, and round-off granularity per density level (L/N/M); fab tolerance `F = 0.10 mm` and placement tolerance `P = 0.05 mm` per IPC-7351B §3.1.3. The component-tolerance term `C` is zero by repo policy (the JSON sidecar enforces `Lmin == Lmax` etc. before the writer ever runs). See [`house/altium_pcblib/ipc.py`](house/altium_pcblib/ipc.py).
-- **DDL-001 drawing standards** — rounded-rectangle pads with 25% corner radius on Top Layer; manual 0.05 mm solder mask expansion per pad; outline + centroid on Mechanical 15 with 0.1 mm line width; embedded parametric 3D model (zlib-compressed STEP) on Mechanical 1 at the nominal `L × W × H`; no silkscreen, no courtyard. See [`docs/standards/DDL-001.tex`](docs/standards/DDL-001.tex) and [`house/altium_pcblib/ddl.py`](house/altium_pcblib/ddl.py).
-- **Minimum solder mask sliver enforcement** — DDL-001 §11.2.5 requires ≥ 0.1 mm solder mask sliver between adjacent pad apertures. When IPC's calculated `G - 2E` falls below 0.1 mm, the writer overlays a single Top Solder region across both apertures (instead of shrinking copper) and prints a "mask-bridge" diagnostic to stderr so the deviation is auditable. The families that hit this in the current dataset are CAPC0402, CAPC0603, RESC0402, and RESC0603.
+- **HLCL-001 drawing standards** — rounded-rectangle pads with 25% corner radius on Top Layer; manual 0.05 mm solder mask expansion per pad; outline + centroid on Mechanical 15 with 0.1 mm line width; embedded parametric 3D model (zlib-compressed STEP) on Mechanical 1 at the nominal `L × W × H`; no silkscreen, no courtyard. See [`docs/standards/HLCL-001.tex`](docs/standards/HLCL-001.tex) and [`house/altium_pcblib/hlcl.py`](house/altium_pcblib/hlcl.py).
+- **Minimum solder mask sliver enforcement** — HLCL-001 §11.2.5 requires ≥ 0.1 mm solder mask sliver between adjacent pad apertures. When IPC's calculated `G - 2E` falls below 0.1 mm, the writer overlays a single Top Solder region across both apertures (instead of shrinking copper) and prints a "mask-bridge" diagnostic to stderr so the deviation is auditable. The families that hit this in the current dataset are CAPC0402, CAPC0603, RESC0402, and RESC0603.
 
 The writer is structured into clean layers:
 
@@ -193,7 +212,7 @@ The writer is structured into clean layers:
 | [`altium_pcblib/records.py`](house/altium_pcblib/records.py) | Dataclasses for `PcbPad`, `PcbTrack`, `PcbRegion`, `PcbComponentBody`, `PcbComponent`, `PcbModel`, `PcbLibrary`. |
 | [`altium_pcblib/writer.py`](house/altium_pcblib/writer.py) | Per-record binary serialisers; ties everything into the CFB container. |
 | [`altium_pcblib/ipc.py`](house/altium_pcblib/ipc.py) | IPC-7351B chip-component land pattern math. |
-| [`altium_pcblib/ddl.py`](house/altium_pcblib/ddl.py) | DDL-001 drawing-standards constants. |
+| [`altium_pcblib/hlcl.py`](house/altium_pcblib/hlcl.py) | HLCL-001 drawing-standards constants. |
 | [`altium_pcblib/footprint.py`](house/altium_pcblib/footprint.py) | High-level chip-footprint factory (combines the above). |
 
 The writer's wire format target is **AltiumSharp v1.0.2-compatible**: the same record byte layout, parameter-list ordering, and field-default sentinels that the v1 NuGet writer produced. We replicate v1's specific quirks (e.g. `EMBED=T` instead of `EMBED=TRUE` in model metadata; `IDENTIFIER=67,104,...` codepoint encoding; `Coord.FromInt32(1)` sentinels for otherwise-zero fields) so the output round-trips through v1's reader cleanly. AltiumSharp's reader on a 168-footprint reference library yields **0 errors, 0 warnings, 0 DTO field diffs** vs. the older C#-emitted output, and 1180 of 1181 internal CFB streams are byte-identical (the lone exception is `Library/Data`, where we deliberately use a fixed sentinel `DATE`/`TIME` for reproducibility instead of the wall-clock).
@@ -201,32 +220,40 @@ The writer's wire format target is **AltiumSharp v1.0.2-compatible**: the same r
 To regenerate just the .PcbLib (after a vendor JSON change has already propagated):
 
 ```bash
-make house-pcblib
+python build.py house-pcblib
 ```
 
 Or invoke the writer directly:
 
 ```bash
 python house/build_pcblib.py \
-    --input    build/footprints/house-footprints.json \
-    --output   build/house.PcbLib \
-    --step-dir build/step
+    --input    build/intermediate/footprints/house-footprints.json \
+    --output   build/output/house.PcbLib \
+    --step-dir build/intermediate/step
 ```
 
-> **Known quirk — resave the `.xls` in Microsoft Excel after every regeneration.**
+> **Historical note — `xlwt`'s malformed `WRITEACCESS` record.**
 >
-> Altium's DbLib OLE DB reader cannot open the `.xls` files that `xlwt` produces directly. The workbook looks fine in Excel and the data is correct, but Altium fails to load it (symptom: the DbLib opens but the tables are empty, or tables load but placed components don't resolve their symbols/footprints even when the field mappings are correct).
+> Older revisions of this repo required every freshly-generated `build/output/<vendor>.xls` to be opened (and closed — no save needed) in Microsoft Excel before Altium's DbLib OLE DB reader could load it. The symptom was that the DbLib would open but its tables would appear empty, or tables would load but placed components would fail to resolve their symbols/footprints even with the field mappings correct.
 >
-> **Workaround:** after running the generator script, open the produced `build/<vendor>.xls` in Microsoft Excel and save it (File → Save, keeping the `.xls` Excel 97-2003 format). Excel rewrites the file with whatever internal structure the ACE OLE DB provider expects, and Altium then reads it without complaint. This needs to happen every time the script is re-run.
+> Root cause: `xlwt-1.3` emits a malformed `WRITEACCESS` record (BIFF type `0x005C`). Per [MS-XLS] §2.4.351 the 112-byte payload is supposed to be an `XLUnicodeString` (`uint16 cch`, `uint8 fHighByte`, then chars, then space padding); `xlwt` skips the framing bytes entirely and packs the owner name as raw ASCII followed by space padding. Excel's reader silently repairs the record on open; the ACE/Jet OLE DB driver Altium uses does not, and silently fails to load the table.
 >
-> (The root cause appears to be a long-standing incompatibility between `xlwt`'s BIFF8 output and the ACE OLE DB driver Altium uses — the TL;DR being that `xlwt` writes a technically-valid-but-minimal BIFF8 stream that Excel normalizes on save. LibreOffice Calc's "Save As → Excel 97-2003" has been reported to work as a free substitute for the Excel round-trip, but isn't verified here.)
+> **Fix:** `vendors/_common.py` monkey-patches `xlwt.BIFFRecords.WriteAccessRecord` to emit a spec-compliant `XLUnicodeString` payload. Every vendor script imports `_common` before saving its workbook, so the patch is applied in one place and every generated `.xls` opens directly in Altium. No Excel round-trip required.
 
 # Vendor Library Details
 
-- Panasonic resistor family rationale and inclusion matrix: [`vendors/panasonic/README.md`](vendors/panasonic/README.md)
-- TDK capacitor notes: [`vendors/tdk/README.md`](vendors/tdk/README.md)
-- Samsung capacitor notes: [`vendors/samsung/README.md`](vendors/samsung/README.md)
-- Murata capacitor/ferrite notes: [`vendors/murata/README.md`](vendors/murata/README.md)
+- Panasonic resistor family rationale and inclusion matrix: [`vendors/panasonic/README.md`](vendors/panasonic/README.md). Per-family script details:
+  - ERJ thick-film: [`vendors/panasonic/erj/`](vendors/panasonic/erj)
+  - ERA-A thin-film 0201: [`vendors/panasonic/era-a/`](vendors/panasonic/era-a)
+  - ERA-V/K thin-film high-stability: [`vendors/panasonic/era-v/`](vendors/panasonic/era-v)
+  - ERA-P 500V thin-film 1206: [`vendors/panasonic/era-p/`](vendors/panasonic/era-p)
+- TDK CGA capacitor notes: [`vendors/tdk/README.md`](vendors/tdk/README.md) + [`vendors/tdk/cga/`](vendors/tdk/cga)
+- Samsung CL capacitor notes: [`vendors/samsung/README.md`](vendors/samsung/README.md) + [`vendors/samsung/cl/`](vendors/samsung/cl)
+- Murata library overview: [`vendors/murata/README.md`](vendors/murata/README.md). Per-family scripts:
+  - GCM (automotive MLCC): [`vendors/murata/gcm/`](vendors/murata/gcm)
+  - GRM (commercial MLCC): [`vendors/murata/grm/README.md`](vendors/murata/grm/README.md)
+  - BLM (ferrite beads): [`vendors/murata/blm/`](vendors/murata/blm)
+- Ohmite KDV (current-sense resistor) notes: [`vendors/ohmite/kdv/README.md`](vendors/ohmite/kdv/README.md)
 
 # Database Standards
 

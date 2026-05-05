@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>HLCL · A JDBC tool</title>
+  <rect x="2" y="2" width="60" height="60" rx="10" fill="#111b30" />
+  <rect x="14" y="26" width="36" height="12" rx="1.5" fill="#cbd5e1" />
+  <rect x="10" y="22" width="6" height="20" rx="1" fill="#94a3b8" />
+  <rect x="48" y="22" width="6" height="20" rx="1" fill="#94a3b8" />
+  <path
+    d="M36 8 L24 30 H32 L28 56 L42 30 H34 L38 8 Z"
+    fill="#f59e0b"
+    opacity="0.95"
+  />
+</svg>

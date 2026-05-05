@@ -59,7 +59,7 @@ DEFAULT_FLAGS = 0x000C
 # fields the binary format doesn't carry.
 COMMON_FILL = b"\xFF" * 10
 
-# Pad body block sizes per AltiumSharp v1.0.2 / DDL-001 SMT chip pad.
+# Pad body block sizes per AltiumSharp v1.0.2 / HLCL-001 SMT chip pad.
 PAD_MAIN_BLOCK_SIZE = 114                # pad-data fixed-size payload
 PAD_SIZE_SHAPE_BLOCK_SIZE = 596          # extended size/shape payload
 
@@ -100,6 +100,12 @@ def build_compound_file(library: PcbLibrary) -> CompoundFile:
     """Build (but don't write) the CFB container for ``library``.
     Useful for callers that want to introspect the structure or get
     the bytes via ``cf.to_bytes()`` without going through a file."""
+    # Pre-pass: fill in body.model_name from the matching
+    # Library/Models entry's name so the body's MODEL.NAME parameter
+    # always agrees with what Altium will see in the model list.
+    # Idempotent: leaves explicitly-set values alone.
+    _populate_body_model_names(library)
+
     cf = CompoundFile()
     cf.add_stream("FileHeader", _build_file_header())
     cf.add_stream("Library/Header", _u32(1))                  # 1 = library record count
@@ -111,6 +117,18 @@ def build_compound_file(library: PcbLibrary) -> CompoundFile:
     for component in library.components:
         _add_component_storage(cf, component)
     return cf
+
+
+def _populate_body_model_names(library: PcbLibrary) -> None:
+    """If a body's model_name is empty, fill it from the matching
+    Library/Models entry. Altium uses MODEL.NAME on the placed body
+    to reconstruct the embedded-model reference; if it's empty,
+    placement falls back to extruding the polygon outline."""
+    by_id = {m.id: m for m in library.models}
+    for c in library.components:
+        for body in c.component_bodies:
+            if not body.model_name and body.model_id in by_id:
+                body.model_name = by_id[body.model_id].name
 
 
 # --- FileHeader stream ------------------------------------------------
@@ -216,22 +234,36 @@ def _render_library_params_template(library: PcbLibrary) -> str:
 def _build_models_metadata(models: List[PcbModel]) -> bytes:
     """Library/Models/Data: one length-prefixed C-string parameter
     block per model. Order matches the numeric stream names (model 0
-    -> Library/Models/0, etc.) so the matching by index is implicit.
+    -> Library/Models/0, etc.) so matching by index is implicit.
 
-    Field set matches what AltiumSharp v1.0.2 emits, which is a
-    minimal 4-key form (ID, DZ, EMBED, NAME) -- shorter and
-    different from the master branch's 9-key form (which adds
-    MODELSOURCE, ROTX/Y/Z, CHECKSUM). v1's ``EMBED=T`` (not
-    ``EMBED=TRUE``) is one of several v1 quirks we replicate."""
+    Key set + ordering matches what AltiumSharp v2 emits (
+    ``Serialization/Writers/PcbLibWriter.cs::WriteLibraryModels``):
+    9 keys joined by ``|`` with no leading separator, in the exact
+    order ``EMBED, MODELSOURCE, ID, ROTX, ROTY, ROTZ, DZ, CHECKSUM,
+    NAME``. ``EMBED`` is the literal ``TRUE``/``FALSE`` (not the
+    legacy 1-char ``T``/``F``), and rotations format with three
+    decimals.
+
+    ``CHECKSUM`` is the model's own checksum that Altium records
+    using a proprietary algorithm. AltiumSharp v2 documents this
+    field as "set to 0 for newly created models" and Altium accepts
+    0 as a "no checksum, take the bytes as-is" sentinel. Emitting
+    our own CRC32 instead causes Altium to reject the model and
+    render a red bounding-box placeholder."""
     bw = BinaryWriter()
     for m in models:
         params = {
-            "ID":    m.id,
-            "DZ":    str(m.dz),
-            "EMBED": "T" if m.is_embedded else "F",
-            "NAME":  m.name,
+            "EMBED":       "TRUE" if m.is_embedded else "FALSE",
+            "MODELSOURCE": m.model_source or "Undefined",
+            "ID":          m.id,
+            "ROTX":        f"{m.rotation_x:.3f}",
+            "ROTY":        f"{m.rotation_y:.3f}",
+            "ROTZ":        f"{m.rotation_z:.3f}",
+            "DZ":          str(m.dz),
+            "CHECKSUM":    str(m.checksum),
+            "NAME":        m.name,
         }
-        bw.write_c_string_param_block(params)
+        bw.write_c_string_param_block_no_leading_pipe(params)
     return bw.getvalue()
 
 
@@ -498,7 +530,12 @@ def _write_body(bw: BinaryWriter, body: PcbComponentBody) -> None:
     """ComponentBody block. Same shape as Region (common + reserved +
     param block + vertex list) but with a much richer parameter
     payload (3D model link, body color, height, identifier, etc.).
-    """
+
+    The parameter block uses the leading-pipe ``|KEY=VAL|...`` form
+    (matching what AltiumSharp v2 / Altium itself emit). Altium's
+    reader strips the leading pipe before tokenising, so both forms
+    parse, but the leading-pipe form is what Altium emits in
+    reference files."""
     with bw.block():
         _write_common_primitive(bw, int(body.layer))
         bw.write_u32(0)
@@ -511,36 +548,85 @@ def _write_body(bw: BinaryWriter, body: PcbComponentBody) -> None:
 
 
 def _body_parameters(body: PcbComponentBody) -> Dict[str, str]:
-    """Build the ComponentBody parameter dict in the order AltiumSharp
-    v1.0.2 emits them (insertion order matters for byte-stable
-    output)."""
+    """Build the ComponentBody parameter dict.
+
+    Key set + ordering + value formats match what AltiumSharp v2
+    emits (``Serialization/Writers/PcbLibWriter.cs::
+    WriteComponentBody``), which in turn matches what Altium
+    Designer itself emits when saving a PcbLib that contains a
+    STEP-driven 3D body.
+
+    Coord values are emitted as raw 32-bit integer strings (Altium's
+    internal 1/10000-mil units, e.g. ``"196850"`` for 0.5 mm), NOT
+    as ``"<n>mil"`` formatted strings. Altium's body-parameter
+    reader uses ``int.TryParse`` directly on the string, so the bare
+    integer is what it expects; the ``"31mil"`` form parses
+    elsewhere in Altium but does *not* parse on this code path and
+    leaves the field at its default. That matters here because
+    placement (and the Components-pane preview) decides whether to
+    render the embedded STEP or fall back to extruding the polygon
+    outline based on the full set of model-related fields, and a
+    silently-zeroed field is enough to send the decision the wrong
+    way.
+
+    Empty-valued fields (``IDENTIFIER``, ``TEXTURE``) are omitted
+    rather than emitted with empty values -- AltiumSharp v2 does
+    the same, and an empty ``TEXTURE`` value confuses Altium's
+    texture loader."""
     p: Dict[str, str] = {}
-    p["V7_LAYER"] = body.v7_layer or "MECHANICAL1"
-    p["NAME"] = body.name
-    p["SUBPOLYINDEX"] = str(body.sub_poly_index)
-    p["ARCRESOLUTION"] = _coord_mil_str(body.arc_resolution)
-    p["ISSHAPEBASED"] = "TRUE" if body.is_shape_based else "FALSE"
-    p["STANDOFFHEIGHT"] = _coord_mil_str(body.standoff_height)
-    p["OVERALLHEIGHT"] = _coord_mil_str(body.overall_height)
-    p["BODYCOLOR3D"] = str(body.body_color_3d)
-    p["BODYOPACITY3D"] = f"{body.body_opacity_3d:.6f}"
-    # IDENTIFIER is encoded as comma-separated codepoints (a v1.0.2
-    # quirk -- AltiumSharp's PcbComponentBody.Identifier setter
-    # converts a string to "67,104,..." style on serialization).
-    p["IDENTIFIER"] = ",".join(str(ord(c)) for c in (body.identifier or ""))
-    p["TEXTURE"] = body.texture
-    p["TEXTURECENTERX"] = _coord_mil_str(body.texture_center_x)
-    p["TEXTURECENTERY"] = _coord_mil_str(body.texture_center_y)
-    p["TEXTURESIZEX"] = _coord_mil_str(body.texture_size_x)
-    p["TEXTURESIZEY"] = _coord_mil_str(body.texture_size_y)
-    p["TEXTUREROTATION"] = f"{body.texture_rotation:.6f}"
-    p["MODELID"] = body.model_id
-    p["MODEL.EMBED"] = "TRUE" if body.model_embed else "FALSE"
-    p["MODEL.2D.X"] = _coord_mil_str(body.model_2d_x)
-    p["MODEL.2D.Y"] = _coord_mil_str(body.model_2d_y)
-    p["MODEL.3D.DZ"] = _coord_mil_str(body.model_3d_dz)
-    p["MODEL.MODELTYPE"] = "1"
+    p["V7_LAYER"]          = body.v7_layer or "MECHANICAL1"
+    p["NAME"]              = body.name
+    p["KIND"]              = str(body.kind)
+    p["SUBPOLYINDEX"]      = str(body.sub_poly_index)
+    p["UNIONINDEX"]        = str(body.union_index)
+    p["ARCRESOLUTION"]     = _double_str(float(body.arc_resolution.raw))
+    p["ISSHAPEBASED"]      = "TRUE" if body.is_shape_based else "FALSE"
+    p["CAVITYHEIGHT"]      = str(body.cavity_height.raw)
+    p["STANDOFFHEIGHT"]    = str(body.standoff_height.raw)
+    p["OVERALLHEIGHT"]     = str(body.overall_height.raw)
+    p["BODYCOLOR3D"]       = str(body.body_color_3d)
+    p["BODYOPACITY3D"]     = _double_str(body.body_opacity_3d)
+    p["BODYPROJECTION"]    = str(body.body_projection)
+    p["MODELID"]           = body.model_id
+    p["MODEL.EMBED"]       = "TRUE" if body.model_embed else "FALSE"
+    p["MODEL.2D.X"]        = str(body.model_2d_x.raw)
+    p["MODEL.2D.Y"]        = str(body.model_2d_y.raw)
+    p["MODEL.2D.ROTATION"] = _double_str(body.model_2d_rotation)
+    p["MODEL.3D.ROTX"]     = _double_str(body.model_3d_rot_x)
+    p["MODEL.3D.ROTY"]     = _double_str(body.model_3d_rot_y)
+    p["MODEL.3D.ROTZ"]     = _double_str(body.model_3d_rot_z)
+    p["MODEL.3D.DZ"]       = str(body.model_3d_dz.raw)
+    p["MODEL.CHECKSUM"]    = str(body.model_checksum)
+    p["MODEL.NAME"]        = body.model_name or "ChipBody.STEP"
+    p["MODEL.MODELTYPE"]   = str(body.model_type)
+    p["MODEL.MODELSOURCE"] = body.model_source or "Undefined"
+    if body.identifier:
+        p["IDENTIFIER"] = body.identifier
+    if body.texture:
+        p["TEXTURE"] = body.texture
     return p
+
+
+def _double_str(v: float) -> str:
+    """Format a float using .NET's ``CultureInfo.InvariantCulture``
+    default ``ToString()`` style, which AltiumSharp v2 uses for all
+    its double-typed body parameters. The .NET default is the
+    "round-trip" general-format-G15: integer values render as bare
+    integers (``"0"`` not ``"0.0"``), fractional values keep up to
+    15 significant digits without a trailing zero, and scientific
+    notation is reserved for values outside ~1e-4 to ~1e15.
+
+    Python's ``repr(float)`` is close but not identical (e.g. it
+    emits ``"0.0"`` where .NET emits ``"0"``); we match .NET so the
+    bytes line up for diffing against C#-emitted reference files."""
+    if v == 0.0:
+        return "0"
+    if v.is_integer() and abs(v) < 1e15:
+        return str(int(v))
+    s = repr(v)
+    # repr can emit scientific form for very small / very large
+    # values; .NET also uses scientific form there, so leave as is.
+    return s
 
 
 # --- Helpers ---------------------------------------------------------

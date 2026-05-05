@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
 Generate parametric STEP 3D models for every unique chip body listed
-in ``build/footprints/house-footprints.json``.
+in ``build/intermediate/footprints/house-footprints.json``.
 
 The body geometry of a chip footprint is identical across the three
 IPC-7351B density variants (``L`` / ``N`` / ``M`` — those only change
@@ -9,14 +9,14 @@ the pad geometry, not the component itself). So we deduplicate by
 *footprint root* — the FootprintName with its trailing density letter
 stripped — and emit one STEP file per root:
 
-    build/step/CAPC0402X20.step    <-- shared by CAPC0402X20{L,N,M}
-    build/step/RESC0402X13.step    <-- shared by RESC0402X13{L,N,M}
+    build/intermediate/step/CAPC0402X20.step  <-- shared by CAPC0402X20{L,N,M}
+    build/intermediate/step/RESC0402X13.step  <-- shared by RESC0402X13{L,N,M}
     ...
 
 The .PcbLib writer (``house/build_pcblib.py``, run by
-``make house-pcblib``) loads each footprint's STEP file by stripping
-the same density suffix, so all three density variants in the .PcbLib
-end up referencing -- and embedding -- the same STEP body.
+``python build.py house-pcblib``) loads each footprint's STEP file by
+stripping the same density suffix, so all three density variants in
+the .PcbLib end up referencing -- and embedding -- the same STEP body.
 
 If two footprints share a root but disagree on body dimensions (which
 would be a regression in either the per-vendor JSONs or the merge
@@ -28,8 +28,8 @@ Two consumers read these files:
 1. The pure-Python .PcbLib writer in ``house/altium_pcblib/``, which
    zlib-compresses each STEP and embeds it into the matching
    ``Library/Models/<n>`` stream of every L/N/M variant of that root.
-   After ``make all``, no external STEP files are required for the
-   .PcbLib to render in Altium.
+   After ``python build.py all``, no external STEP files are required
+   for the .PcbLib to render in Altium.
 
 2. Humans, for inspection. Open them in any STEP viewer to check the
    geometry independently of Altium.
@@ -40,7 +40,7 @@ browser via Pyodide for an open-source web UI). See
 ``house/stepgen/__init__.py`` for the design constraints.
 
 Schema-version contract: this script reads
-``build/footprints/house-footprints.json`` schemaVersion 1 (written by
+``build/intermediate/footprints/house-footprints.json`` schemaVersion 1 (written by
 ``house/build_house_footprints.py``). Schema bumps must be reflected
 here too.
 """
@@ -62,8 +62,14 @@ if HERE not in sys.path:
 import stepgen  # noqa: E402
 
 REPO_ROOT = os.path.normpath(os.path.join(HERE, ".."))
-INPUT_PATH = os.path.join(REPO_ROOT, "build", "footprints", "house-footprints.json")
-OUTPUT_DIR = os.path.join(REPO_ROOT, "build", "step")
+# Both inputs and outputs are intermediates. The .step files feed the
+# .PcbLib autogenerator (which embeds them, zlib-compressed, into the
+# .PcbLib that lands in build/output/) -- so they never need to be
+# user-facing on their own.
+INPUT_PATH = os.path.join(
+    REPO_ROOT, "build", "intermediate", "footprints", "house-footprints.json",
+)
+OUTPUT_DIR = os.path.join(REPO_ROOT, "build", "intermediate", "step")
 
 KIND_TO_GEN = {
     "C":  stepgen.capc,   # chip ceramic capacitor
@@ -76,7 +82,7 @@ KIND_TO_GEN = {
 def main() -> int:
     if not os.path.exists(INPUT_PATH):
         print(
-            f"error: {INPUT_PATH} not found; run `make house-footprints` first",
+            f"error: {INPUT_PATH} not found; run `python build.py house-footprints` first",
             file=sys.stderr,
         )
         return 1
@@ -99,8 +105,7 @@ def main() -> int:
     # Sweep stale .step files so this directory is exactly the set of
     # roots we're about to write. Catches both per-density legacy files
     # (e.g. CAPC0402X20L.step from before the dedup) and orphans left
-    # behind when a footprint is removed from a vendor JSON. The .stamp
-    # file the Makefile maintains is intentionally left alone.
+    # behind when a footprint is removed from a vendor JSON.
     for fn in os.listdir(OUTPUT_DIR):
         if fn.endswith(".step"):
             try:

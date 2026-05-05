@@ -45,21 +45,21 @@ def raw_to_mm(raw: int) -> float:
 
 
 def raw_to_mil_str(raw: int) -> str:
-    """Format a raw Coord as the 'X.XXXmil' / 'X.XXXXmil' string Altium
-    uses in parameter lists. Trim trailing zeros while preserving the
-    decimal point if any. Mirrors the ToString of the AltiumSharp v1
-    Coord type."""
+    """Format a raw Coord as the 'Xmil' / 'X.XXXmil' / 'X.XXXXmil'
+    string Altium uses in parameter lists. Zero is emitted as the
+    bare integer ``0mil`` (matching what Altium itself emits in its
+    reference files); other values keep enough decimals to preserve
+    the raw resolution (1 raw unit = 0.0001 mil)."""
+    if raw == 0:
+        return "0mil"
     mil = raw / RAW_PER_MIL
-    # 4 decimal places of mil = exactly the raw resolution (1 raw =
-    # 0.0001 mil), so no precision is lost. Strip trailing zeros for
-    # readability except keep at least one digit after the decimal
-    # to match what AltiumSharp emits ("0.0001mil" not "0mil").
+    # 4 decimal places of mil = exactly the raw resolution. Strip
+    # trailing zeros for readability; if all decimals strip away,
+    # emit the bare integer (matches Altium's "31mil" form rather
+    # than the older "31.0mil" form we used to emit).
     s = f"{mil:.4f}"
-    # Strip trailing zeros after decimal but keep '.0' if integral.
     if "." in s:
         s = s.rstrip("0").rstrip(".")
-        if "." not in s:
-            s = s + ".0"
     return s + "mil"
 
 

@@ -30,7 +30,8 @@ be unit-tested or swapped out independently:
                          records into the CFB container
     ipc.py            -- IPC-7351B pad math (port of IpcRules +
                          PadCalculator from the C# project)
-    ddl.py            -- DDL-001 drawing constants
+    hlcl.py           -- HLCL-001 (Humanity's Last Component Library)
+                         drawing constants
     footprint.py      -- chip-footprint factory (port of
                          ChipFootprintBuilder from the C# project)
 """
