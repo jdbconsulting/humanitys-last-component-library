@@ -373,12 +373,11 @@ Other npm scripts: `npm run check` (svelte-check), `npm run lint` / `npm run for
 
 ### Building for GitHub Pages
 
-[`svelte.config.js`](svelte.config.js) reads `BASE_PATH` from the environment so dev runs at `/` and CI builds at the repo path. The default is `/be-done-with-it-passives` (matching `https://jdbrinton.github.io/be-done-with-it-passives/`).
+[`svelte.config.js`](svelte.config.js) reads `BASE_PATH` from the environment so dev runs at `/` and CI builds at whatever prefix the deploy URL uses. The default is `''` (empty) because production is served at the apex of the custom domain `hlcl.jdbrinton.consulting` — the CNAME for that domain is checked in at [`static/CNAME`](static/CNAME) and ships with every deploy. Forks landing on `https://<owner>.github.io/<repo>/` need to set `BASE_PATH=/<repo>` to bake that prefix into the emitted asset URLs.
 
 ```sh
-NODE_ENV=production npm run build                       # default base path
-NODE_ENV=production BASE_PATH=/my-fork npm run build    # forks
-NODE_ENV=production BASE_PATH= npm run build            # user / org page
+NODE_ENV=production npm run build                       # apex / custom domain
+NODE_ENV=production BASE_PATH=/my-fork npm run build    # https://<owner>.github.io/my-fork/
 ```
 
 The `build/` directory at the repo root is what GitHub Pages serves. It contains `index.html` and `configure/index.html` (prerendered), `404.html` (SPA fallback), `_app/` (JS / CSS bundle), `.nojekyll` (opt out of Jekyll's `_app/`-eating prefix munging), and `hlcl-build-inputs.tgz` (gzipped tar of the build-relevant subset of `hlcl/`; Pyodide fetches and unpacks it on the first "Run build" click).
@@ -389,7 +388,7 @@ Two workflows live under [`.github/workflows/`](.github/workflows). Both run on 
 
 | Workflow                                             | What it does                                                                                                                                                                                                                       | Output                                                                                                                                                                                                                                  |
 | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`pages.yml`](.github/workflows/pages.yml)           | `npm ci && NODE_ENV=production npm run build` and ship `build/` (which contains the SvelteKit static bundle plus the auto-generated `hlcl-build-inputs.tgz` — the gzipped Pyodide-side mount of [`hlcl/`](hlcl/)) to GitHub Pages. | Live site at `https://<owner>.github.io/be-done-with-it-passives/`                                                                                                                                                                      |
+| [`pages.yml`](.github/workflows/pages.yml)           | `npm ci && NODE_ENV=production npm run build` and ship `build/` (which contains the SvelteKit static bundle plus the auto-generated `hlcl-build-inputs.tgz` — the gzipped Pyodide-side mount of [`hlcl/`](hlcl/)) to GitHub Pages. | Live site at `https://hlcl.jdbrinton.consulting/`                                                                                                                                                                                       |
 | [`hlcl-build.yml`](.github/workflows/hlcl-build.yml) | `pip install -r requirements.txt && python hlcl/build.py` (default `all` target — pure Python, no native deps).                                                                                                                    | Workflow artifact `hlcl-build-output` containing the entire `hlcl/build/output/` tree (vendor `.xls` + `.DbLib` workbooks, `house.PcbLib`, `house.SchLib`). Downloaded from the **Actions** run page as a single zip; retained 90 days. |
 
 For a fork hosted at a different Pages path, set `BASE_PATH` (or unset it for a user / org page) in `pages.yml`:
