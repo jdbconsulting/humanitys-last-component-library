@@ -20,6 +20,21 @@ jobs:
 
       - run: pip install -r requirements.txt
 
+      # `hlcl/factory-defaults.json` is generated from `src/lib/schema.ts`
+      # by the Vite plugin (`vite/plugins/hlcl-build-assets.ts`) and
+      # `package.json`'s `prepare` post-install hook calls the same
+      # regenerator via `tsx vite/scripts/regen.ts`. The Python build
+      # in turn needs that JSON as its default config (see
+      # `hlcl/_config.bootstrap`), so we have to install Node deps
+      # before invoking Python -- otherwise `build.py` aborts with
+      # "No build configuration available".
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
       # Default `all` target: every vendor `.xls`/`.DbLib`, the merged
       # footprints JSON, parametric STEP models, `house.PcbLib`, and
       # `house.SchLib`. The `standards` target (which renders the
