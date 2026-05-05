@@ -348,28 +348,50 @@ class AppState {
 		// unknown keys + applies `.default()` so the in-memory object is
 		// always canonical).
 		const reparsed = persistedStateSchema.parse(state);
-		this.config = {
+
+		// Compose the next-state plain objects up-front, then assign in
+		// one synchronous burst at the bottom. This matters because
+		// `applyPersistedState` runs inside the `hydrate()` $effect in
+		// `+layout.svelte`: any read through `this.config` or `this.ui`
+		// here would establish those slices as reactive dependencies of
+		// the hydrate effect, and the very next mutation we make would
+		// re-fire the effect, calling `hydrate()` again, looping until
+		// Svelte's effect-depth guard trips and the whole page is left
+		// in a half-mounted state (which surfaces as "the Apply Preset
+		// button doesn't do anything"). Working entirely off the
+		// pre-wrap plain `reparsed` / `nextConfig` / `nextUi` keeps the
+		// hydrate effect's dep set empty and the run-count at 1.
+		const nextConfig: BuildConfig = {
 			...reparsed.config,
 			// Catalogs grow over time; persisted state from before a new
 			// family landed misses its entry. Backfill before the
 			// Libraries tab tries to render a card for it.
 			families: backfillMissingFamilies(reparsed.config.families)
 		};
-		// Don't restore active_preset_id across reloads — we can't reliably
-		// know if state still matches the named preset, so we conservatively
-		// show "Custom" until the user re-applies.
-		this.ui = {
+		const nextUi: UiSession = {
 			...reparsed.ui,
+			// Don't restore active_preset_id across reloads — we can't
+			// reliably know if state still matches the named preset, so
+			// we conservatively show "Custom" until the user re-applies.
 			active_preset_id: null,
 			config_name: sanitizeConfigFilenameStem(reparsed.ui.config_name ?? '')
 		};
+
 		// Re-anchor the in-memory drift detector so the post-hydrate
 		// $effect tick sees no drift (otherwise opening the page after
 		// a preset application would itself fire the auto-rename, even
-		// though the user hasn't touched anything yet). Anchor against
-		// the live snapshot only when name_origin === 'preset' — for
-		// 'manual' we don't track drift at all, so the value is moot.
-		this.presetSnapshotKey = this.ui.name_origin === 'preset' ? this.snapshotKey() : '';
+		// though the user hasn't touched anything yet). Anchored only
+		// when name_origin === 'preset'; for 'manual' we don't track
+		// drift at all, so the value is moot. JSON.stringify on the
+		// plain `nextConfig` matches what `snapshotKey()` will compute
+		// later via $state.snapshot — both walk the same object shape
+		// in the same key order.
+		const anchor =
+			nextUi.name_origin === 'preset' ? JSON.stringify(nextConfig) : '';
+
+		this.config = nextConfig;
+		this.ui = nextUi;
+		this.presetSnapshotKey = anchor;
 	}
 
 	/** Snapshot the current state as a plain JSON-safe object. */
