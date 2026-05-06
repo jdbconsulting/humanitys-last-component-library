@@ -82,17 +82,18 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-      # Pack the output tree into stable-named archives so the
-      # `/releases/latest/download/<asset>` URLs never change between
-      # builds. `zip` for Altium/Windows users, `tar.gz` for everyone
-      # else. Both archives are rooted at `output/` so unpacking keeps
-      # the directory layout the rest of the docs reference.
+      # Pack the output tree into a stable-named archive so the
+      # `/releases/latest/download/<asset>` URL never changes between
+      # builds. Only `.zip` is published — Altium is the sole supported
+      # EDA target and ships Windows-only, so the audience for this
+      # archive is on Windows where `.zip` is the native unpack format.
+      # The archive is rooted at `output/` so unpacking keeps the
+      # directory layout the rest of the docs reference.
       - name: Package build output for release
         run: |
           set -euo pipefail
           mkdir -p release
           (cd hlcl/build && zip -r "$GITHUB_WORKSPACE/release/hlcl-build-output.zip" output)
-          tar -czf release/hlcl-build-output.tar.gz -C hlcl/build output
           ls -la release
 
       # Rolling `latest` release. Each push to `main` retags `latest` at
@@ -133,16 +134,14 @@ jobs:
           - Built: ${built_at}
           - Workflow run: [#${RUN_ID}](${SERVER_URL}/${REPO}/actions/runs/${RUN_ID})
 
-          ## Downloads
+          ## Download
 
-          - **\`hlcl-build-output.zip\`** — full \`hlcl/build/output/\` tree (vendor \`.xls\` + \`.DbLib\` workbooks, merged footprints JSON, parametric STEP models, \`house.PcbLib\`, \`house.SchLib\`). Recommended for Altium / Windows users.
-          - **\`hlcl-build-output.tar.gz\`** — same tree, gzipped tar. Recommended for Linux / macOS users and CI consumers.
+          **\`hlcl-build-output.zip\`** — full \`hlcl/build/output/\` tree: vendor \`.xls\` + \`.DbLib\` workbooks, merged footprints JSON, parametric STEP models, \`house.PcbLib\`, \`house.SchLib\`. Targets Altium on Windows (currently the only supported EDA tool).
 
-          The \`latest\` tag is moved on every push to \`main\`, so the asset URLs above are stable across builds:
+          The \`latest\` tag is moved on every push to \`main\`, so the asset URL is stable across builds:
 
           \`\`\`
           ${SERVER_URL}/${REPO}/releases/latest/download/hlcl-build-output.zip
-          ${SERVER_URL}/${REPO}/releases/latest/download/hlcl-build-output.tar.gz
           \`\`\`
           EOF
 
@@ -158,5 +157,4 @@ jobs:
             --notes-file release/notes.md \
             --target "$COMMIT_SHA" \
             --latest \
-            release/hlcl-build-output.zip \
-            release/hlcl-build-output.tar.gz
+            release/hlcl-build-output.zip
