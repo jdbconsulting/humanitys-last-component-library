@@ -148,7 +148,7 @@
 				</p>
 
 				<div
-					class="mt-7 flex flex-wrap items-center justify-center gap-3 sm:mt-10 lg:justify-start"
+					class="mt-7 flex flex-wrap items-stretch justify-center gap-3 sm:mt-10 lg:justify-start"
 				>
 					<a
 						href={resolve('/configure/')}
@@ -167,16 +167,24 @@
 						href="https://github.com/jdbconsulting/humanitys-last-component-library/releases/tag/latest"
 						target="_blank"
 						rel="noopener noreferrer"
-						class="inline-flex items-center gap-2 rounded-lg bg-white px-6 py-3 text-sm font-semibold text-navy-900 shadow-sm transition hover:bg-ink-100 hover:shadow-md"
+						class="inline-flex items-center gap-2.5 rounded-lg bg-white px-6 py-3 text-sm font-semibold text-navy-900 shadow-sm transition hover:bg-ink-100 hover:shadow-md"
 					>
-						<svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+						<svg
+							class="h-5 w-5 shrink-0"
+							viewBox="0 0 20 20"
+							fill="currentColor"
+							aria-hidden="true"
+						>
 							<path
 								fill-rule="evenodd"
 								d="M10 3a1 1 0 011 1v6.586l1.293-1.293a1 1 0 011.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 011.414-1.414L9 10.586V4a1 1 0 011-1zM3 16a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
 								clip-rule="evenodd"
 							/>
 						</svg>
-						I ain't got time. Download default library.
+						<span class="flex flex-col items-start text-left leading-tight">
+							<span>I ain't got time.</span>
+							<span>Download default library.</span>
+						</span>
 					</a>
 					<a
 						href="https://github.com/jdbconsulting/humanitys-last-component-library"
