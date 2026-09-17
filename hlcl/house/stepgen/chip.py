@@ -176,6 +176,7 @@ def indc(
 def resc(
     L: float, W: float, H: float, T: float,
     footprint_name: str | None = None,
+    bottom_terminal_mm: float | None = None,
 ) -> str:
     """Generate a STEP file for a chip resistor (RESC family).
 
@@ -232,6 +233,9 @@ def resc(
     # than half of T (so the L-axis vertical end fits inside the
     # band length T with room for the wraps).
     t = min(t, H / 3.0, T / 2.0)
+
+    bottom_T = T if bottom_terminal_mm is None else bottom_terminal_mm
+    _validate(L, W, H, bottom_T, name)
 
     # ---- Substrate (mid grey alumina) -------------------------------
     # Centred box that fits snug inside the two C-terminals: it
@@ -290,11 +294,13 @@ def resc(
         )
         doc.add_solid(end_v, colors.RESC_TERMINAL_DARK_GREY)
 
+        bottom_inner = x_outer - sign * bottom_T
+        bottom_min, bottom_max = sorted((x_outer, bottom_inner))
         # Bottom wrap (the floor strip of the C)
         bot_w = sharp_box(
             doc,
-            wrap_xmin, -W / 2.0, 0.0,
-            wrap_xmax, +W / 2.0, t,
+            bottom_min, -W / 2.0, 0.0,
+            bottom_max, +W / 2.0, t,
             name=side_label + "Bot",
         )
         doc.add_solid(bot_w, colors.RESC_TERMINAL_DARK_GREY)

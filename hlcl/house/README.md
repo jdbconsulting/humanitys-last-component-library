@@ -9,6 +9,27 @@ The build pipeline is fully automated end-to-end — Altium's IPC Compliant Foot
 3. **Parametric STEP 3D models.** [`build_step_models.py`](build_step_models.py) reads the merged JSON and calls into the pure-Python geometry engine in [`stepgen/`](stepgen) to write one `build/intermediate/step/<root>.step` per unique chip body. Because L / N / M density variants share an identical body, the generator dedupes by footprint root (e.g. `build/intermediate/step/CAPC0402X20.step` is shared by `CAPC0402X20{L,N,M}`).
 4. **`.PcbLib` autogeneration.** The pure-Python writer under [`altium_pcblib/`](altium_pcblib) consumes both the merged JSON and the STEP files, applies IPC-7351B pad math + the HLCL-001 drawing standards (rounded-rect 25%-radius pads, 0.05 mm solder mask expansion with a bridge region whenever the natural sliver would fall under 0.1 mm, 3D body on Mech 1, outline + centroid on Mech 15, no silkscreen, no courtyard, library default units = mm), and emits `build/output/house.PcbLib` with each STEP model embedded inline (zlib-compressed). The driver script is [`build_pcblib.py`](build_pcblib.py).
 
+## 3D body heights and units
+
+STEP geometry is in millimetres. Altium also stores body dimensions in the
+footprint's text parameter block: `OVERALLHEIGHT`, `STANDOFFHEIGHT`,
+`CAVITYHEIGHT`, `ARCRESOLUTION`, and `MODEL.2D.X/Y` / `MODEL.3D.DZ`. Those
+parameters require unit-qualified lengths, such as `19.685mil` for 0.5 mm.
+The Altium-saved [coupon board](../coupon/amaya.PcbDoc) provides examples of
+this encoding. Binary polygon coordinates still use raw 1/10000-mil units.
+
+Writing the raw coordinate `196850` into `OVERALLHEIGHT` caused a 0.5 mm
+body to report a height 10,000 times too large while its embedded STEP
+rendered correctly. The writer now uses explicit mil units for these text
+parameters. The existing STEP geometry does not need rescaling.
+
+Run the regression checks from the repository root with
+`python -m unittest discover -s tests -v`. Rebuild with
+`python hlcl/build.py house-pcblib`; use the resulting
+`hlcl/build/output/house.PcbLib` and update previously placed PCB footprints
+from the corrected library. Existing boards retain their copied body records
+until updated; replacing standalone STEP files will not correct that metadata.
+
 Footprint names follow **IPC-SM-782**:
 
 ```

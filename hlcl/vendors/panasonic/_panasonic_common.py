@@ -187,8 +187,8 @@ e24_e96_combined_200_100K = [200,205,210,215,220,221,226,232,237,240,243,249,255
 
 
 # --- ERA-family resistance ranges ----------------------------------------
-# Sub-100 ohm: only E24 values are available (4-digit E96 code requires
-# multiplier >= 0).
+# The sub-100 ohm values carried here are E24. ERA-V encodes these
+# with an R decimal marker (for example, 47 ohm -> 47R0).
 e24_only_47_91 = [47, 51, 56, 62, 68, 75, 82, 91]
 era_100_10k = [v for v in e24_e96_combined_100_1M if v <= 10000]            # ERA-1AEB (0201)
 era_47_100K = e24_only_47_91 + [v for v in e24_e96_combined_100_1M if v <= 100000]  # ERA-V low range
@@ -214,12 +214,14 @@ def is_e24(ohms):
     return False
 
 
-def format_number_era(num):
+def format_number_era(num, family_id):
+    """Encode ERA-A's mixed-width or ERA-V/K/P's four-character codes."""
     s = str(int(num))
-    if is_e24(num):
+    if family_id == "panasonic-era-a" and is_e24(num):
         return s[:2] + str(len(s) - 2)
-    else:
-        return s[:3] + str(len(s) - 3)
+    if num < 100:
+        return "{:.1f}".format(num).replace(".", "R")
+    return s[:3] + str(len(s) - 3)
 
 
 def make_era_range(vendor, prefix, suffix, values, power, voltage,
@@ -234,7 +236,7 @@ def make_era_range(vendor, prefix, suffix, values, power, voltage,
     fp_cells = _common.xls_footprint_columns(PCBLIB, fp_root, family_id)
     table = []
     for x in values:
-        pn = prefix + format_number_era(x) + suffix
+        pn = prefix + format_number_era(x, family_id) + suffix
         description = "RESISTOR THIN FILM " + format_resistance(x) + " OHM " + tolerance + " " + eiacase
         row = [pn, description, vendor, pn, eiacase, format_resistance(x), tolerance, tcr, tr, qualifications, voltage, schem_lib, schematic]
         row = row + fp_cells

@@ -1,11 +1,14 @@
 {
 	"name": "web",
 	"private": true,
-	"version": "0.0.1",
+	"version": "0.2.0",
 	"type": "module",
 	"scripts": {
 		"dev": "vite dev",
+		"prebuild": "npm run release:check",
 		"build": "vite build",
+		"release:check": "tsx vite/scripts/release.ts",
+		"test:release": "node --import tsx --test vite/scripts/release.test.ts",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo '' && tsx vite/scripts/regen.ts",
 		"regen": "tsx vite/scripts/regen.ts",

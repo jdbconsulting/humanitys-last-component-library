@@ -1,0 +1,13 @@
+{
+	"id": "vishay-rcs",
+	"name": "Vishay RCS",
+	"manufacturer": "Vishay",
+	"summary": "AEC-Q200 anti-surge thick film; 1% / 100 ppm and jumpers.",
+	"kind": "resistor",
+	"subtype_id": "vishay-rcs",
+	"subtype_label": "Vishay RCS",
+	"subtype_order": 30,
+	"sort_order": 30,
+	"available_sizes": ["0402", "0603", "0805", "1206"],
+	"options": []
+}

@@ -550,24 +550,14 @@ def _write_body(bw: BinaryWriter, body: PcbComponentBody) -> None:
 def _body_parameters(body: PcbComponentBody) -> Dict[str, str]:
     """Build the ComponentBody parameter dict.
 
-    Key set + ordering + value formats match what AltiumSharp v2
-    emits (``Serialization/Writers/PcbLibWriter.cs::
-    WriteComponentBody``), which in turn matches what Altium
-    Designer itself emits when saving a PcbLib that contains a
-    STEP-driven 3D body.
-
-    Coord values are emitted as raw 32-bit integer strings (Altium's
-    internal 1/10000-mil units, e.g. ``"196850"`` for 0.5 mm), NOT
-    as ``"<n>mil"`` formatted strings. Altium's body-parameter
-    reader uses ``int.TryParse`` directly on the string, so the bare
-    integer is what it expects; the ``"31mil"`` form parses
-    elsewhere in Altium but does *not* parse on this code path and
-    leaves the field at its default. That matters here because
-    placement (and the Components-pane preview) decides whether to
-    render the embedded STEP or fall back to extruding the polygon
-    outline based on the full set of model-related fields, and a
-    silently-zeroed field is enough to send the decision the wrong
-    way.
+    Length-valued text parameters use explicit mil units, as seen in
+    ``hlcl/coupon/amaya.PcbDoc`` saved by Altium: a 0.5 mm body has
+    ``OVERALLHEIGHT=19.685mil``. Writing its raw coordinate ``196850``
+    instead makes the reported height 10,000 times too large even
+    though the embedded STEP geometry still renders at the right size.
+    This applies to heights, arc resolution, and model X/Y/Z offsets.
+    The binary outline vertices and Library/Models metadata use their
+    own encodings; do not apply this text-parameter conversion there.
 
     Empty-valued fields (``IDENTIFIER``, ``TEXTURE``) are omitted
     rather than emitted with empty values -- AltiumSharp v2 does
@@ -579,23 +569,23 @@ def _body_parameters(body: PcbComponentBody) -> Dict[str, str]:
     p["KIND"]              = str(body.kind)
     p["SUBPOLYINDEX"]      = str(body.sub_poly_index)
     p["UNIONINDEX"]        = str(body.union_index)
-    p["ARCRESOLUTION"]     = _double_str(float(body.arc_resolution.raw))
+    p["ARCRESOLUTION"]     = _coord_mil_str(body.arc_resolution)
     p["ISSHAPEBASED"]      = "TRUE" if body.is_shape_based else "FALSE"
-    p["CAVITYHEIGHT"]      = str(body.cavity_height.raw)
-    p["STANDOFFHEIGHT"]    = str(body.standoff_height.raw)
-    p["OVERALLHEIGHT"]     = str(body.overall_height.raw)
+    p["CAVITYHEIGHT"]      = _coord_mil_str(body.cavity_height)
+    p["STANDOFFHEIGHT"]    = _coord_mil_str(body.standoff_height)
+    p["OVERALLHEIGHT"]     = _coord_mil_str(body.overall_height)
     p["BODYCOLOR3D"]       = str(body.body_color_3d)
     p["BODYOPACITY3D"]     = _double_str(body.body_opacity_3d)
     p["BODYPROJECTION"]    = str(body.body_projection)
     p["MODELID"]           = body.model_id
     p["MODEL.EMBED"]       = "TRUE" if body.model_embed else "FALSE"
-    p["MODEL.2D.X"]        = str(body.model_2d_x.raw)
-    p["MODEL.2D.Y"]        = str(body.model_2d_y.raw)
+    p["MODEL.2D.X"]        = _coord_mil_str(body.model_2d_x)
+    p["MODEL.2D.Y"]        = _coord_mil_str(body.model_2d_y)
     p["MODEL.2D.ROTATION"] = _double_str(body.model_2d_rotation)
     p["MODEL.3D.ROTX"]     = _double_str(body.model_3d_rot_x)
     p["MODEL.3D.ROTY"]     = _double_str(body.model_3d_rot_y)
     p["MODEL.3D.ROTZ"]     = _double_str(body.model_3d_rot_z)
-    p["MODEL.3D.DZ"]       = str(body.model_3d_dz.raw)
+    p["MODEL.3D.DZ"]       = _coord_mil_str(body.model_3d_dz)
     p["MODEL.CHECKSUM"]    = str(body.model_checksum)
     p["MODEL.NAME"]        = body.model_name or "ChipBody.STEP"
     p["MODEL.MODELTYPE"]   = str(body.model_type)

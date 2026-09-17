@@ -1,0 +1,13 @@
+{
+	"id": "vishay-mc-precision",
+	"name": "Vishay MC Precision",
+	"manufacturer": "Vishay",
+	"summary": "Precision thin film; 0.1% / 25 ppm ordering-code subset.",
+	"kind": "resistor",
+	"subtype_id": "vishay-mc-precision",
+	"subtype_label": "Vishay MC Precision",
+	"subtype_order": 30,
+	"sort_order": 30,
+	"available_sizes": ["0402", "0603", "0805", "1206"],
+	"options": []
+}

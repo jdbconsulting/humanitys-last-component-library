@@ -1,10 +1,10 @@
 {
 	"id": "everything",
-	"title": "Everything · the kitchen sink",
+	"title": "Everything \u00b7 the kitchen sink",
 	"tagline": "All families",
 	"description": "Every vendor family this build chain knows about, every density variant, every artifact (including both standards renderings). Slowest preset to build; biggest output set.",
 	"bullets": [
-		"All 17 family generators turned on (resistors, MLCC, ferrites, inductors)",
+		"All 27 family generators turned on (resistors, MLCC, ferrites, inductors)",
 		"L / N / M density variants emitted everywhere",
 		"Standards .tex + .md + house.SchLib + house.PcbLib all packaged",
 		"Useful as a regression baseline"
@@ -56,7 +56,7 @@
 				"enabled": true,
 				"options": {
 					"enabled_densities": ["L", "N", "M"],
-					"sizes": ["0201", "0402", "0603", "0805", "1206"],
+					"sizes": ["0201", "0402", "0603", "0805", "1206", "1210"],
 					"override_pad_radius": 25
 				},
 				"overrides": {
@@ -69,7 +69,7 @@
 				"enabled": true,
 				"options": {
 					"enabled_densities": ["L", "N", "M"],
-					"sizes": ["0201"],
+					"sizes": ["0201", "0402"],
 					"override_pad_radius": 25
 				},
 				"overrides": {
@@ -234,6 +234,136 @@
 					"sizes": false,
 					"override_pad_radius": false
 				}
+			},
+			"murata-gcd": {
+				"enabled": true,
+				"options": {
+					"enabled_densities": ["L", "N", "M"],
+					"sizes": ["0603", "0805"],
+					"override_pad_radius": 25
+				},
+				"overrides": {
+					"enabled_densities": false,
+					"sizes": false,
+					"override_pad_radius": false
+				}
+			},
+			"murata-krm": {
+				"enabled": true,
+				"options": {
+					"enabled_densities": ["L", "N", "M"],
+					"sizes": ["KRM55"],
+					"override_pad_radius": 25
+				},
+				"overrides": {
+					"enabled_densities": false,
+					"sizes": false,
+					"override_pad_radius": false
+				}
+			},
+			"kemet-x7r": {
+				"enabled": true,
+				"options": {
+					"enabled_densities": ["L", "N", "M"],
+					"sizes": ["0402", "0805"],
+					"override_pad_radius": 25
+				},
+				"overrides": {
+					"enabled_densities": false,
+					"sizes": false,
+					"override_pad_radius": false
+				}
+			},
+			"kemet-open-mode": {
+				"enabled": true,
+				"options": {
+					"enabled_densities": ["L", "N", "M"],
+					"sizes": ["0603", "1210"],
+					"override_pad_radius": 25
+				},
+				"overrides": {
+					"enabled_densities": false,
+					"sizes": false,
+					"override_pad_radius": false
+				}
+			},
+			"kemet-esd-c0g": {
+				"enabled": true,
+				"options": {
+					"enabled_densities": ["L", "N", "M"],
+					"sizes": ["0805"],
+					"override_pad_radius": 25
+				},
+				"overrides": {
+					"enabled_densities": false,
+					"sizes": false,
+					"override_pad_radius": false
+				}
+			},
+			"tdk-c": {
+				"enabled": true,
+				"options": {
+					"enabled_densities": ["L", "N", "M"],
+					"sizes": ["0402", "1210"],
+					"override_pad_radius": 25
+				},
+				"overrides": {
+					"enabled_densities": false,
+					"sizes": false,
+					"override_pad_radius": false
+				}
+			},
+			"vishay-rcs": {
+				"enabled": true,
+				"options": {
+					"enabled_densities": ["L", "N", "M"],
+					"sizes": ["0402", "0603", "0805", "1206"],
+					"override_pad_radius": 25
+				},
+				"overrides": {
+					"enabled_densities": false,
+					"sizes": false,
+					"override_pad_radius": false
+				}
+			},
+			"vishay-rcp": {
+				"enabled": true,
+				"options": {
+					"enabled_densities": ["L", "N", "M"],
+					"sizes": ["0603", "1206", "2512"],
+					"override_pad_radius": 25
+				},
+				"overrides": {
+					"enabled_densities": false,
+					"sizes": false,
+					"override_pad_radius": false
+				}
+			},
+			"vishay-mc-precision": {
+				"enabled": true,
+				"options": {
+					"enabled_densities": ["L", "N", "M"],
+					"sizes": ["0402", "0603", "0805", "1206"],
+					"override_pad_radius": 25
+				},
+				"overrides": {
+					"enabled_densities": false,
+					"sizes": false,
+					"override_pad_radius": false
+				}
+			},
+			"vishay-mc-at": {
+				"enabled": true,
+				"options": {
+					"enabled_densities": ["L", "N", "M"],
+					"sizes": ["0402", "0603", "0805", "1206"],
+					"override_pad_radius": 25
+				},
+				"overrides": {
+					"enabled_densities": false,
+					"sizes": false,
+					"override_pad_radius": false
+				}
 			}
 		},
 		"settings": {
@@ -270,7 +400,7 @@
 				"max_crosshair_half_arm_mm": 0.5,
 				"component_body_standoff_mm": 0,
 				"enabled_densities": ["L", "N", "M"],
-				"enabled_sizes": ["01005", "0201", "0402", "0603", "0805", "1206", "1210"]
+				"enabled_sizes": ["01005", "0201", "0402", "0603", "0805", "1206", "1210", "2512", "KRM55"]
 			},
 			"stepgen": {
 				"default_fillet_radius_mm": 0.05,

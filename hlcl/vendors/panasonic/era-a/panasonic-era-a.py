@@ -5,13 +5,10 @@ high-precision chip-resistor family.
 
 Datasheet: reference/panasonic_era-a.pdf
 
-ERA-A is the precision thin-film line. Only the 0201 part (ERA-1AEB)
-is carried here -- the 0402-1206 ERA-2/3/6/8AEB parts are
-intentionally omitted because they're superseded by the newer ERA-V/K
-line (higher power, anti-ESD, anti-sulfur). At 0201, ERA-1AEB is the
-only thin-film precision option Panasonic ships.
-
-Tolerance: 0.1%. TCR: +/-25 ppm/K. Range: 100 ohm - 10 kohm.
+ERA-A precision thin film: ERA-1AEB 0201 (100 ohm..10 kohm),
+ERA-2AEB 0402 (47 ohm..100 kohm), ERA-2ARB 0402 (200 ohm..47 kohm).
+Tolerance 0.1%; TCR 25 ppm/K for AEB and 10 ppm/K for ARB.
+ERA-A remains useful alongside the higher-power V/K line.
 
 Usage:
     python vendors/panasonic/era-a/panasonic-era-a.py
@@ -61,7 +58,27 @@ def build_table():
         "0.1%", "+/-25", "-55:155", "AEC-Q200 GRADE 1", "0201", "RES", pc.SCHLIB,
         "RESC0603X23", VENDOR_KEY)
 
+    table += pc.make_era_range("Panasonic", "ERA-2ARB", "X",
+        [v for v in pc.e24_e96_combined_100_1M if 200 <= v <= 47000],
+        "0.063W", "50V", "0.1%", "+/-10", "-55:155", "AEC-Q200 GRADE 1",
+        "0402", "RES", pc.SCHLIB, "RESC1005X40_ERA2A", VENDOR_KEY)
+    table += pc.make_era_range("Panasonic", "ERA-2AEB", "X",
+        pc.era_47_100K, "0.063W", "50V", "0.1%", "+/-25", "-55:155",
+        "AEC-Q200 GRADE 1", "0402", "RES", pc.SCHLIB, "RESC1005X40_ERA2A", VENDOR_KEY)
+
     return table
+
+
+def era2_footprints():
+    if "0402" not in _vendor_common.enabled_sizes(VENDOR_KEY):
+        return []
+    return _vendor_common.expand_footprint_rows([{
+        "root": "RESC1005X40_ERA2A", "kind": "R",
+        "drawingNote": "Panasonic ERA-A 24-Apr-2024 p.3; maximum height; nominal L/W and terminals",
+        "bodyMm": {"lengthNominal": 1.0, "widthNominal": .5,
+                   "heightNominal": .4, "terminalLengthNominal": .25},
+        "model": {"type": "wide-bottom", "topTerminalLengthMm": .15},
+    }], VENDOR_KEY)
 
 
 def main():
@@ -83,7 +100,7 @@ def main():
     _vendor_common.write_footprints_json(
         os.path.join(FOOTPRINTS_DIR, VENDOR_KEY + "-footprints.json"),
         vendor=VENDOR_KEY,
-        footprints=pc.build_footprint_rows(FOOTPRINT_ROOTS, VENDOR_KEY),
+        footprints=pc.build_footprint_rows(FOOTPRINT_ROOTS, VENDOR_KEY) + era2_footprints(),
     )
 
 

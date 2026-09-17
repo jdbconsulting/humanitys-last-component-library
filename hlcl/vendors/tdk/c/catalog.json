@@ -1,0 +1,13 @@
+{
+	"id": "tdk-c",
+	"name": "TDK C",
+	"manufacturer": "TDK",
+	"summary": "Commercial C-series general and medium-voltage X7R.",
+	"kind": "capacitor",
+	"subtype_id": "tdk-c",
+	"subtype_label": "TDK C",
+	"subtype_order": 30,
+	"sort_order": 30,
+	"available_sizes": ["0402", "1210"],
+	"options": []
+}

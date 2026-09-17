@@ -1,0 +1,26 @@
+[
+	{
+		"version": "0.2.0",
+		"status": "released",
+		"releasedOn": "2026-09-17",
+		"changes": [
+			"Expand the full default library to 59,065 component entries, 324 footprints (including L/N/M density variants), and 27 families.",
+			"Add 10 passive families: Murata GCD and KRM; KEMET X7R, Open Mode, and ESD C0G; TDK C; and Vishay RCS, RCP, MC Precision, and MC AT.",
+			"Extend Panasonic ERA-A with 0402 AEB/ARB parts, Samsung CL with selected automotive parts, and Yageo AC with 1210 parts.",
+			"Add manufacturer-recommended land patterns and dedicated terminal geometry for RCP and KRM, plus 2512 and KRM55 package selections.",
+			"Correct Panasonic ERA-V/K/P resistance codes, including ERA-2VEB9100X for 910 Ω and R notation below 100 Ω. This fixes 297 generated part numbers while preserving ERA-A numbering.",
+			"Correct 3D body height and offset units in generated Altium footprint libraries so component heights match the embedded STEP models.",
+			"Import previously exported configuration JSON from Configure → Presets → Import JSON, with validation before applying settings.",
+			"Add website revision history and a version link in the footer of every page.",
+			"Track the website version in builds and document promotion from dev to production through versioned releases."
+		]
+	},
+	{
+		"version": "0.1.0",
+		"status": "released",
+		"releasedOn": null,
+		"changes": [
+			"Original website, including documentation, the browser configurator, and Altium library generation. This version number was assigned retrospectively."
+		]
+	}
+]

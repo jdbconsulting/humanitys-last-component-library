@@ -1,0 +1,13 @@
+{
+	"id": "vishay-rcp",
+	"name": "Vishay RCP",
+	"manufacturer": "Vishay",
+	"summary": "AlN power thick film; curated wide-terminal selection.",
+	"kind": "resistor",
+	"subtype_id": "vishay-rcp",
+	"subtype_label": "Vishay RCP",
+	"subtype_order": 30,
+	"sort_order": 30,
+	"available_sizes": ["0603", "1206", "2512"],
+	"options": []
+}

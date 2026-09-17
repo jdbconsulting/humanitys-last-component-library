@@ -76,12 +76,9 @@ the scraper consumed:
                          the leading nominal)
     height_mm         <- "Compare Thickness" (numeric)
 
-Scope of supported sizes: the mapping below intentionally covers
-01005 .. 1206. Yageo also publishes 0075 (009005), 1210, 1218, 2010,
-and 2512 parts; those drop out at row-build time because
-:data:`SIZE_TO_FOOTPRINT` doesn't list them, keeping the library's
-size envelope aligned with the rest of the catalog (Panasonic,
-Murata, Samsung).
+Scope of supported sizes: 01005 .. 1206, plus 1210 for AC only.
+Yageo also publishes 0075 (009005), 1218, 2010 and 2512 parts;
+those remain outside this mapping.
 """
 
 from __future__ import annotations
@@ -135,12 +132,12 @@ PCBLIB = r"house.PcbLib"
 # heights match between the three datasheets (RC and AC ship the
 # same chip stack, RT differs only at 0805 by 0.05 mm which we
 # round to the same X-code). Sizes 0075 (009005), 1218, 2010, 2512
-# are intentionally omitted -- the rest of the library doesn't
-# carry footprints for those EIA cases. 1210 is omitted too: the
-# CGA / GCM-style 3225 RESC body isn't yet in the catalog.
+# are intentionally omitted from the Yageo importers. The AC-only
+# 1210 entry uses its exact maximum height and qualified footprint root.
 #
 #                yageo:  (eia,    metric, fp_root,         L,    W,    H,    T)
 SIZE_TO_FOOTPRINT: Mapping[str, tuple] = {
+    "1210": ("1210", "3126", "RESC3126X65_AC", 3.10, 2.60, 0.65, 0.50),
     "0100": ("01005", "0402",  "RESC0402X13", 0.40, 0.20, 0.13, 0.10),
     "0201": ("0201",  "0603",  "RESC0603X23", 0.60, 0.30, 0.23, 0.15),
     "0402": ("0402",  "1005",  "RESC1005X35", 1.00, 0.50, 0.35, 0.25),
@@ -259,6 +256,8 @@ def row_for_part(
     in the catalog.
     """
     size_code = csv_row["size_code"]
+    if size_code == "1210" and family_id != "yageo-ac":
+        return None
     if size_code not in SIZE_TO_FOOTPRINT:
         return None
 
@@ -347,4 +346,8 @@ def build_footprint_rows(
                 },
             }
         )
+    for body in bodies:
+        if body["root"] == "RESC3126X65_AC":
+            body["drawingNote"] = "https://www.yageogroup.com/component-documentation/download/specsheet/AC1210FR-0760R4L; maximum height; nominal L/W and terminals"
+            body["model"] = {"type": "wide-bottom", "topTerminalLengthMm": .45}
     return _common.expand_footprint_rows(bodies, family_id)

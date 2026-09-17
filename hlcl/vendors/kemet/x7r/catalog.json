@@ -1,0 +1,13 @@
+{
+	"id": "kemet-x7r",
+	"name": "KEMET X7R",
+	"manufacturer": "KEMET",
+	"summary": "Standard commercial X7R; curated exact ordering codes.",
+	"kind": "capacitor",
+	"subtype_id": "kemet-x7r",
+	"subtype_label": "KEMET X7R",
+	"subtype_order": 30,
+	"sort_order": 30,
+	"available_sizes": ["0402", "0805"],
+	"options": []
+}

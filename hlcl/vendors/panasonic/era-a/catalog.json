@@ -2,12 +2,12 @@
 	"id": "panasonic-era-a",
 	"name": "Panasonic ERA-A",
 	"manufacturer": "Panasonic",
-	"summary": "Thin-film high-precision, 0201 only.",
+	"summary": "Precision thin film: 0201 AEB and 0402 AEB/ARB, 0.1%.",
 	"kind": "resistor",
 	"subtype_id": "thin-film",
 	"subtype_label": "Thin film",
 	"subtype_order": 20,
 	"sort_order": 10,
-	"available_sizes": ["0201"],
+	"available_sizes": ["0201", "0402"],
 	"options": []
 }

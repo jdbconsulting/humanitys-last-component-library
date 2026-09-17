@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
+	import { websiteVersion } from '$lib/website-version';
 	import JdbcMark from './JdbcMark.svelte';
 
 	const year = new Date().getFullYear();
@@ -132,5 +134,13 @@
 				jdbrinton.consulting →
 			</a>
 		</div>
+		<p class="mt-5 text-xs text-ink-500">
+			<a
+				href={resolve('/docs/#revision-history')}
+				class="font-medium underline decoration-ink-300 underline-offset-4 transition hover:text-navy-900"
+			>
+				Website v{websiteVersion}
+			</a>
+		</p>
 	</div>
 </footer>

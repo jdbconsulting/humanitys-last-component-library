@@ -1,20 +1,19 @@
-name: Deploy site to Pages
+name: Website checks and release
 
 on:
   push:
-    branches: [main]
+    branches: [dev, main]
+    tags: ['v*']
+  pull_request:
+    branches: [dev, main]
+  # Select an existing vX.Y.Z tag to redeploy; branch runs only validate.
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
-# Allow only one concurrent deployment, skipping runs queued between the
-# in-progress run and the latest queued run. Don't cancel in-progress runs
-# so a deploy that is already publishing finishes cleanly.
 concurrency:
-  group: pages
+  group: website-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -22,6 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -30,19 +31,98 @@ jobs:
 
       - run: npm ci
 
-      - run: npm run build
-        env:
-          NODE_ENV: production
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
-      - uses: actions/configure-pages@v5
+      - name: Require release metadata on main
+        if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
+        run: npm run release:check -- --stable
+
+      - name: Validate production tag and main ancestry
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          VERSION_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          npm run release:check -- --tag "$VERSION_TAG"
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "Website release tags must point to a commit on main."
+            exit 1
+          fi
+
+      - run: npm run test:release
+      - run: python3 -m unittest discover -s tests
+      - run: npm run check
+      - run: npm run build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: website-${{ github.sha }}
+          path: build
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Package website release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          VERSION_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          npm run release:check -- --tag "$VERSION_TAG" --notes release/notes.md
+          (cd build && zip -qr "../release/website-${VERSION_TAG}.zip" .)
+
+      - uses: actions/upload-artifact@v4
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          name: website-release
+          path: release/
+          if-no-files-found: error
 
       - uses: actions/upload-pages-artifact@v3
+        if: startsWith(github.ref, 'refs/tags/v')
         with:
           path: build
 
   deploy:
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-latest
-    environment: github-pages
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/deploy-pages@v4
+        id: deployment
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: website-release
+          path: release
+
+      - name: Publish website release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          VERSION_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if gh release view "$VERSION_TAG" >/dev/null 2>&1; then
+            echo "Release $VERSION_TAG already exists; redeployment complete."
+          else
+            gh release create "$VERSION_TAG" \
+              --verify-tag \
+              --title "Website $VERSION_TAG" \
+              --notes-file release/notes.md \
+              --latest=false \
+              "release/website-${VERSION_TAG}.zip"
+          fi

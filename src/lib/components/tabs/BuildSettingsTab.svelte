@@ -70,7 +70,8 @@
 			label: 'house.SchLib',
 			description: 'Hand-maintained schematic library copied alongside the .DbLib outputs.',
 			buildTarget: 'house-schlib',
-			group: 'house'
+			group: 'house',
+			recommended: true
 		},
 		{
 			key: 'standards_tex',
