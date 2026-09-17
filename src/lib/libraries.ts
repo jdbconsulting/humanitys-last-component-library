@@ -113,7 +113,9 @@ export const EIA_CASE_SIZE_LABELS: Record<string, string> = {
 	'0603': '0603 (1608)',
 	'0805': '0805 (2012)',
 	'1206': '1206 (3216)',
-	'1210': '1210 (3225)'
+	'1210': '1210 (3225)',
+	'2512': '2512 (6332)',
+	KRM55: 'KRM55 (6.1 x 5.3 mm)'
 };
 
 function sizeChoicesFor(availableSizes: readonly string[]): { id: string; label: string }[] {

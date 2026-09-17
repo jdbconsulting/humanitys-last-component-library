@@ -25,11 +25,13 @@
 		}
 	];
 
-	const heroStats = ['50,366 components!', '240 footprints', '17 families'] as const;
+	// Full default build: hlcl/build_stats.py counts workbook rows and merged
+	// footprints (including L/N/M density variants); the catalog has 27 families.
+	const heroStats = ['59,065 components!', '324 footprints', '27 families'] as const;
 
 	// Hand-curated family list for the marketing grid below. Kept in
 	// sync with the on-disk catalog (`hlcl/vendors/<mfg>/<family>/catalog.json`,
-	// 17 families today): grouped four-up so the cards match the
+	// 27 families today): grouped four-up so the cards match the
 	// 2 × 2 grid on `lg:` and stack cleanly on narrower screens.
 	const families: { kind: string; entries: string[] }[] = [
 		{
@@ -38,22 +40,32 @@
 				'Panasonic ERJ — thick film, 01005–0805 (commodity)',
 				'Yageo RC — thick film, 01005–1206 (alt. commodity)',
 				'Stackpole RMCF — thick film AEC-Q200, 01005–1206',
-				'Yageo AC — thick film AEC-Q200, 0201–1206',
-				'Panasonic ERA-A — thin film, 0201 (high precision)',
+				'Yageo AC — thick film AEC-Q200, 0201–1210',
+				'Panasonic ERA-A — thin film, 0201–0402 (high precision)',
 				'Panasonic ERA-V/K — thin film, 0402–0805 (high stability)',
 				'Panasonic ERA-P — thin film 500 V, 1206 (high voltage)',
 				'Yageo RT — precision thin film, 01005–1206 (5–50 ppm/°C)',
 				'Stackpole RNCF — precision thin film AEC-Q200, 0201–1206',
-				'Ohmite KDV — metal-film current-sense, 0201–1206'
+				'Ohmite KDV — metal-film current-sense, 0201–1206',
+				'Vishay RCS — anti-surge thick film AEC-Q200, 0402–1206',
+				'Vishay RCP — power thick film, 0603 / 2512 (wide terminals)',
+				'Vishay MC Precision — thin film, 0402–1206 (0.1%, 25 ppm/°C)',
+				'Vishay MC AT — thin film AEC-Q200, 0402–1206 (0.1%, 25 ppm/°C)'
 			]
 		},
 		{
 			kind: 'Capacitors (MLCC)',
 			entries: [
 				'Murata GRM — commercial, 01005–1210',
-				'Samsung CL — commercial, 01005–1210',
+				'Samsung CL — commercial and selected automotive parts, 01005–1210',
 				'Murata GCM — automotive AEC-Q200, 0201–1210',
-				'TDK CGA — automotive AEC-Q200, 0603–1210'
+				'TDK CGA — automotive AEC-Q200, 0603–1210',
+				'Murata GCD — automotive MLSC, 0603 / 0805 (internal series connection)',
+				'Murata KRM — metal-terminal X7R, KRM55Q (6.1 × 5.3 mm)',
+				'KEMET X7R — commercial, 0402 / 0805',
+				'KEMET Open Mode — automotive X7R, 0603 / 1210',
+				'KEMET ESD C0G — automotive ESD-rated, 0805',
+				'TDK C — commercial X7R, 0402 / 1210'
 			]
 		},
 		{

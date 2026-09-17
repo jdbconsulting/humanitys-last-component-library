@@ -134,6 +134,7 @@ def main() -> int:
             body["widthNominal"],
             body["heightNominal"],
             body["terminalLengthNominal"],
+            json.dumps(fp.get("model", {}), sort_keys=True),
         )
         if root in groups:
             if groups[root]["body_key"] != body_key:
@@ -163,9 +164,19 @@ def main() -> int:
     footprint_users = 0
     for root in sorted(groups):
         info = groups[root]
-        kind, L, W, H, T = info["body_key"]
+        kind, L, W, H, T, model_json = info["body_key"]
+        model = json.loads(model_json)
         try:
-            step_text = KIND_TO_GEN[kind](L, W, H, T, footprint_name=root)
+            if model.get("type") == "metal-terminal":
+                from stepgen.special import metal_terminal
+                step_text = metal_terminal(L, W, H, T, footprint_name=root)
+            elif model.get("type") == "wide-bottom":
+                step_text = stepgen.resc(L, W, H, model["topTerminalLengthMm"],
+                                         footprint_name=root, bottom_terminal_mm=T)
+            elif model:
+                raise ValueError(f"unsupported model: {model}")
+            else:
+                step_text = KIND_TO_GEN[kind](L, W, H, T, footprint_name=root)
         except ValueError as exc:
             # bad/degenerate dimensions; raise loudly so the build fails
             # rather than silently producing a bad STEP.

@@ -3,7 +3,7 @@ Altium primitive types: Coord (32-bit raw integer = 1/10000 mil),
 CoordPoint, Layer enum, OLE color packing.
 
 Internal Altium coordinates are 32-bit signed integers in units of
-1/10000 of a thousandth of an inch (1 raw unit = 0.0001 mil = 25.4
+1/10000 of a thousandth of an inch (1 raw unit = 0.0001 mil = 2.54
 nanometres). This is the resolution Altium stores all geometry at;
 the on-disk binary format is just these raw integers.
 

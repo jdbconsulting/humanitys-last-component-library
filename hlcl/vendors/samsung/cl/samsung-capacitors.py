@@ -240,6 +240,12 @@ CAPC_BODY = {
 # paper; L/D/3 all = 13" paper).
 PACK_SUFFIXES = ("C", "L", "E", "F")
 
+# Exact product pages list these automotive packaging codes. Height is maximum.
+AUTOMOTIVE = {
+    "CL10B223KC8WPN": ("90", .9, ("C", "D")),
+    "CL31B474KCHWPN": ("180", 1.8, ("E", "F")),
+}
+
 # Columns emitted in the xls, in order. Must match the per-row schema
 # documented in README.md ("Database Standards" section). The MFG 2/MPN 2
 # .. MFG 5/MPN 5 slots carry Samsung-internal packaging alternates of
@@ -320,16 +326,20 @@ def build_row(pn, enabled_sizes: frozenset):
     height = THICKNESS_TO_HEIGHT_CODE[thick_code]
 
     cap_str = format_capacitance(decode_capacitance(cap_code))
-    fp_root = f"CAPC{metric}X{height}"
+    if pn in AUTOMOTIVE:
+        height = AUTOMOTIVE[pn][0]
+    fp_root = f"CAPC{metric}X{height}" + ("_SAMA" if pn in AUTOMOTIVE else "")
     fp_cells = _vendor_common.xls_footprint_columns(PCBLIB, fp_root, FAMILY_ID)
 
     description = (
         f"CAPACITOR CERAMIC {cap_str.upper()} {tol} {rv} {dielectric} {eia}"
+        + (" OPEN MODE AEC-Q200" if pn in AUTOMOTIVE else "")
     )
 
     pack_cells = []
-    for suffix in PACK_SUFFIXES:
+    for suffix in (AUTOMOTIVE[pn][2] if pn in AUTOMOTIVE else PACK_SUFFIXES):
         pack_cells += ["Samsung Electro-Mechanics", pn + suffix]
+    pack_cells += [""] * (8 - len(pack_cells))
 
     row = [
         pn,                           # Comment
@@ -342,11 +352,11 @@ def build_row(pn, enabled_sizes: frozenset):
         tol,                          # Tolerance
         tcr,                          # Tcr
         tr,                           # Tr
-        "",                           # Qual (Samsung CL series is general-purpose; auto-grade is CL*-Auto, not in this list)
+        "AEC-Q200" if pn in AUTOMOTIVE else "",  # qualification from exact product page
         rv,                           # Voltage
         SCHLIB, "CAP",                # Library Path / Ref
     ] + fp_cells
-    return row, fp_root, (metric, thick_code)
+    return row, fp_root, (metric, pn if pn in AUTOMOTIVE else thick_code)
 
 
 # --- Per-vendor footprint JSON output ------------------------------------
@@ -367,7 +377,7 @@ def write_footprints_json(path, bodies):
                 file=sys.stderr,
             )
             continue
-        height_code = THICKNESS_TO_HEIGHT_CODE[thick_code]
+        height_code = AUTOMOTIVE[thick_code][0] + "_SAMA" if thick_code in AUTOMOTIVE else THICKNESS_TO_HEIGHT_CODE[thick_code]
         key = (metric, height_code)
         if key in seen:
             continue
@@ -377,11 +387,14 @@ def write_footprints_json(path, bodies):
     body_specs = []
     for metric, thick_code, height_code in deduped:
         L, W, T = CAPC_BODY[metric]
-        H = THICKNESS_TO_HEIGHT_MM[thick_code]
+        if thick_code == "CL10B223KC8WPN":
+            T = .30  # BW=0.30 +/-0.20 mm, exact Samsung reference sheet
+        H = AUTOMOTIVE[thick_code][1] if thick_code in AUTOMOTIVE else THICKNESS_TO_HEIGHT_MM[thick_code]
         body_specs.append({
             "root": f"CAPC{metric}X{height_code}",
             "kind": "C",
-            "drawingNote": DRAWING_NOTE,
+            "drawingNote": ("https://product.samsungsem.com/mlcc/" + thick_code + ".do; maximum height"
+                            if thick_code in AUTOMOTIVE else DRAWING_NOTE),
             "bodyMm": {
                 "lengthNominal":         L,
                 "widthNominal":          W,

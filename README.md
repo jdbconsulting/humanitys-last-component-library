@@ -373,7 +373,7 @@ Other npm scripts: `npm run check` (svelte-check), `npm run lint` / `npm run for
 
 ### Building for GitHub Pages
 
-[`svelte.config.js`](svelte.config.js) reads `BASE_PATH` from the environment so dev runs at `/` and CI builds at whatever prefix the deploy URL uses. The default is `''` (empty) because production is served at the apex of the custom domain `hlcl.jdbrinton.consulting` — the CNAME for that domain is checked in at [`static/CNAME`](static/CNAME) and ships with every deploy. Forks landing on `https://<owner>.github.io/<repo>/` need to set `BASE_PATH=/<repo>` to bake that prefix into the emitted asset URLs.
+[`svelte.config.js`](svelte.config.js) reads `BASE_PATH` from the environment so dev runs at `/` and CI builds at whatever prefix the deploy URL uses. The default is `''` (empty) because production is served at the apex of the custom domain `hlcl.jdbrinton.consulting` — configure that custom domain in the repository’s GitHub Pages settings. Forks landing on `https://<owner>.github.io/<repo>/` need to set `BASE_PATH=/<repo>` to bake that prefix into the emitted asset URLs.
 
 ```sh
 NODE_ENV=production npm run build                       # apex / custom domain
@@ -382,13 +382,21 @@ NODE_ENV=production BASE_PATH=/my-fork npm run build    # https://<owner>.github
 
 The `build/` directory at the repo root is what GitHub Pages serves. It contains `index.html` and `configure/index.html` (prerendered), `404.html` (SPA fallback), `_app/` (JS / CSS bundle), `.nojekyll` (opt out of Jekyll's `_app/`-eating prefix munging), and `hlcl-build-inputs.tgz` (gzipped tar of the build-relevant subset of `hlcl/`; Pyodide fetches and unpacks it on the first "Run build" click).
 
+## Website versions and promotion
+
+The original website is **0.1.0**, and version tracking starts with the **0.2.0** development cycle. Development versions use a `-dev` suffix and are marked unreleased in the website's [revision history](https://hlcl.jdbrinton.consulting/docs/#revision-history). Every page links to that history from its version footer.
+
+[`package.json`](package.json) supplies the build version; [`src/lib/release-history.json`](src/lib/release-history.json) supplies release notes. `npm run build` validates both before building. Keep development on `dev`; production website deployment requires a matching stable `vX.Y.Z` tag on a commit already merged into `main`.
+
+See **[Website versions and releases](docs/releasing.md)** for the commit, pull request, tag, release, redeployment, and next-development-cycle instructions, including a worked example for promoting 0.2.0.
+
 ## Continuous integration
 
-Two workflows live under [`.github/workflows/`](.github/workflows). Both fire on every push to `main`. `pages.yml` is also exposed via `workflow_dispatch` so the live site can be redeployed without a code change; `hlcl-build.yml` deliberately is not, so the rolling `latest` release always tracks `main` and nothing else.
+Two workflows live under [`.github/workflows/`](.github/workflows). Website checks run for pushes and pull requests to `dev` and `main`. Version tags trigger website production deployment after release validation. Manual website runs deploy only when an existing version tag is selected. The library workflow runs only on pushes to `main` and requires stable release metadata before updating its rolling `latest` release.
 
 | Workflow                                             | What it does                                                                                                                                                                                                                       | Output                                                                                                                                                                                                                                                                                                                               |
 | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [`pages.yml`](.github/workflows/pages.yml)           | `npm ci && NODE_ENV=production npm run build` and ship `build/` (which contains the SvelteKit static bundle plus the auto-generated `hlcl-build-inputs.tgz` — the gzipped Pyodide-side mount of [`hlcl/`](hlcl/)) to GitHub Pages. | Live site at `https://hlcl.jdbrinton.consulting/`                                                                                                                                                                                                                                                                                    |
+| [`pages.yml`](.github/workflows/pages.yml)           | Validate release metadata, run release tests and Svelte checks, and build the site. Stable version tags on `main` history deploy to Pages and publish a versioned website release. | Website build artifact on each run; tagged releases deploy to `https://hlcl.jdbrinton.consulting/` and attach `website-vX.Y.Z.zip` to the corresponding GitHub Release.                                                                                                                                                                                                                                                                                    |
 | [`hlcl-build.yml`](.github/workflows/hlcl-build.yml) | `pip install -r requirements.txt && python hlcl/build.py` (default `all` target — pure Python, no native deps), then publishes the result as the rolling [`latest`](../../releases/latest) GitHub Release.                         | (1) Rolling **`latest`** GitHub Release with `hlcl-build-output.zip` attached — visible in the repo's **Releases** sidebar with a stable, permanent download URL (see below). (2) Workflow artifact `hlcl-build-output` on each run page (90-day retention) for downstream `actions/download-artifact@v4` consumers and run history. |
 
 ### Downloading the latest library

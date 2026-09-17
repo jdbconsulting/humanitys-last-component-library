@@ -40,6 +40,7 @@ calls ``Workbook.save``, so the fix is applied in one place.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import sys
@@ -72,7 +73,7 @@ PREFIX_TO_KIND = {
     # their own kind so the STEP generator can colour them differently.
     "INDCFB": "FB",
 }
-_FOOTPRINT_NAME_RE = re.compile(r"^(?P<prefix>CAPC|RESC|INDC)\d{4}X\d+(?P<density>[LMN])$")
+_FOOTPRINT_NAME_RE = re.compile(r"^(?P<prefix>CAPC|RESC|INDC)\d{4}X\d+(?:_[A-Z0-9]+)?(?P<density>[LMN])$")
 
 #: Permitted density-level codes. Mirrors IPC-7351B's L (Least), N
 #: (Nominal), M (Most) labels.
@@ -107,10 +108,25 @@ def _validate_footprint(fp: Mapping) -> None:
     body = fp.get("bodyMm") or {}
     for key in ("lengthNominal", "widthNominal", "heightNominal", "terminalLengthNominal"):
         v = body.get(key)
-        if not isinstance(v, (int, float)) or v <= 0:
+        if not isinstance(v, (int, float)) or not math.isfinite(v) or v <= 0:
             raise ValueError(
                 f"footprint {name!r}: bodyMm.{key} must be a positive number (got {v!r})"
             )
+    if 2 * body["terminalLengthNominal"] >= body["lengthNominal"]:
+        raise ValueError(f"footprint {name!r}: terminals overlap")
+    if "landPatternMm" in fp:
+        for key in ("padLength", "padWidth", "gap"):
+            value = fp["landPatternMm"].get(key)
+            if not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+                raise ValueError(f"footprint {name!r}: invalid landPatternMm.{key}")
+    model = fp.get("model")
+    if model is not None:
+        if model.get("type") == "wide-bottom" and kind == "R":
+            top = model.get("topTerminalLengthMm")
+            if not isinstance(top, (int, float)) or not math.isfinite(top) or not 0 < 2*top < body["lengthNominal"]:
+                raise ValueError(f"footprint {name!r}: invalid top terminal length")
+        elif model.get("type") != "metal-terminal" or kind != "C":
+            raise ValueError(f"footprint {name!r}: invalid model for kind {kind}")
 
 
 def write_footprints_json(
@@ -317,6 +333,7 @@ def expand_footprint_rows(
                     "density": d,
                     "drawingNote": note,
                     "bodyMm": dict(body_mm),
+                    **{k: b[k] for k in ("landPatternMm", "model") if k in b},
                 }
             )
     return out

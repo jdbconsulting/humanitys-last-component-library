@@ -1,0 +1,13 @@
+{
+	"id": "kemet-esd-c0g",
+	"name": "KEMET ESD C0G",
+	"manufacturer": "KEMET",
+	"summary": "Automotive ESD-rated C0G; curated exact ordering codes.",
+	"kind": "capacitor",
+	"subtype_id": "kemet-esd-c0g",
+	"subtype_label": "KEMET ESD C0G",
+	"subtype_order": 30,
+	"sort_order": 30,
+	"available_sizes": ["0805"],
+	"options": []
+}

@@ -21,7 +21,7 @@ from typing import Mapping, Tuple
 from _house_settings import SETTINGS
 
 from . import hlcl
-from .ipc import compute_pad, select_rule
+from .ipc import IpcChipPad, compute_pad, select_rule
 from .primitives import Coord, CoordPoint, Layer, ole_color
 from .records import (
     PcbComponent,
@@ -61,6 +61,7 @@ class FootprintInput:
     body_width_mm: float
     body_height_mm: float
     terminal_length_mm: float
+    land_pattern_mm: Mapping | None = None
 
     @classmethod
     def from_json(cls, row: Mapping) -> "FootprintInput":
@@ -73,6 +74,7 @@ class FootprintInput:
             body_width_mm=float(body["widthNominal"]),
             body_height_mm=float(body["heightNominal"]),
             terminal_length_mm=float(body["terminalLengthNominal"]),
+            land_pattern_mm=row.get("landPatternMm"),
         )
 
 
@@ -94,6 +96,14 @@ def build_chip_footprint(input: FootprintInput) -> Tuple[PcbComponent, str]:
         terminal_length_mm=input.terminal_length_mm,
         rule=rule,
     )
+
+    if input.land_pattern_mm is not None:
+        a, b, g = (float(input.land_pattern_mm[k]) for k in ("padLength", "padWidth", "gap"))
+        if min(a, b, g) <= 0:
+            raise ValueError(f"{input.name}: invalid manufacturer land pattern")
+        pad = IpcChipPad(z_mm=g + 2*a, g_mm=g, x_mm=b,
+                         pad_center_spacing_mm=g+a,
+                         pad_length_along_terminal_mm=a, pad_width_across_terminal_mm=b)
 
     pads = [
         _make_pad("1", -pad.pad_center_spacing_mm / 2.0, pad),

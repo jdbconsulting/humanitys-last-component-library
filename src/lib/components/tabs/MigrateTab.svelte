@@ -248,7 +248,7 @@
 						If you delete and re-import a family, refresh footprints with section&nbsp;2
 						<em>before</em>
 						you import again. Otherwise you can end up with multiple managed footprints that share the
-						same footprint name — duplicate geometry under different
+						same footprint name — duplicate IPC footprint names under different
 						<code class="rounded bg-ink-100 px-1 py-0.5 font-mono text-xs">Item ID</code>'s.
 					</div>
 				</section>

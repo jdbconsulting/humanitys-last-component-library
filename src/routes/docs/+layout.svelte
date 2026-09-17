@@ -89,6 +89,12 @@
 					</li>
 				{/each}
 			</ul>
+			<a
+				href={resolve('/docs/#revision-history')}
+				class="mt-4 inline-block px-3 text-sm font-medium text-navy-900 underline decoration-ink-300 underline-offset-4 hover:text-navy-700 lg:px-2.5"
+			>
+				Revision history
+			</a>
 		</nav>
 
 		<article

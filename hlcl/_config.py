@@ -522,7 +522,7 @@ def _parse_settings(raw: Mapping[str, Any]) -> Settings:
         enabled_sizes=_as_str_list(
             h.get(
                 "enabled_sizes",
-                ["01005", "0201", "0402", "0603", "0805", "1206", "1210"],
+                ["01005", "0201", "0402", "0603", "0805", "1206", "1210", "2512", "KRM55"],
             ),
             "settings.hlcl.enabled_sizes",
         ),

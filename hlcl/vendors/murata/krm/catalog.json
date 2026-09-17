@@ -1,0 +1,13 @@
+{
+	"id": "murata-krm",
+	"name": "Murata KRM",
+	"manufacturer": "Murata",
+	"summary": "Metal-terminal X7R; initial KRM55Q 100 V selection.",
+	"kind": "capacitor",
+	"subtype_id": "murata-krm",
+	"subtype_label": "Murata KRM",
+	"subtype_order": 30,
+	"sort_order": 30,
+	"available_sizes": ["KRM55"],
+	"options": []
+}

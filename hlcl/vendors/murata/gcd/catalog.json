@@ -1,0 +1,13 @@
+{
+	"id": "murata-gcd",
+	"name": "Murata GCD",
+	"manufacturer": "Murata",
+	"summary": "Automotive MLSC series-connected X7R; verified active catalog.",
+	"kind": "capacitor",
+	"subtype_id": "murata-gcd",
+	"subtype_label": "Murata GCD",
+	"subtype_order": 30,
+	"sort_order": 30,
+	"available_sizes": ["0603", "0805"],
+	"options": []
+}

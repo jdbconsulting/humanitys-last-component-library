@@ -114,7 +114,7 @@ export const hlclSettingsSchema = z.object({
 	/** Global default EIA case sizes to include across all families. */
 	enabled_sizes: z
 		.array(z.string())
-		.default(['01005', '0201', '0402', '0603', '0805', '1206', '1210'])
+		.default(['01005', '0201', '0402', '0603', '0805', '1206', '1210', '2512', 'KRM55'])
 });
 
 export const stepgenSettingsSchema = z.object({
@@ -352,7 +352,7 @@ export function defaultBuildConfig(): BuildConfig {
 				max_crosshair_half_arm_mm: 0.5,
 				component_body_standoff_mm: 0.0,
 				enabled_densities: ['L', 'N', 'M'],
-				enabled_sizes: ['01005', '0201', '0402', '0603', '0805', '1206', '1210']
+				enabled_sizes: ['01005', '0201', '0402', '0603', '0805', '1206', '1210', '2512', 'KRM55']
 			},
 			stepgen: {
 				default_fillet_radius_mm: 0.05,

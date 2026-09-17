@@ -51,6 +51,11 @@ jobs:
 
       - run: npm ci
 
+      # main only carries prepared releases; dev never publishes libraries.
+      - run: npm run release:check -- --stable
+
+      - run: python -m unittest discover -s tests
+
       # Default `all` target: every vendor `.xls`/`.DbLib`, the merged
       # footprints JSON, parametric STEP models, `house.PcbLib`, and
       # `house.SchLib`. The `standards` target (which renders the

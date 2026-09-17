@@ -35,12 +35,12 @@
 		}
 	];
 
-	const sizeChoices = (['01005', '0201', '0402', '0603', '0805', '1206', '1210'] as const).map(
-		(id) => ({
-			id,
-			label: EIA_CASE_SIZE_LABELS[id] ?? id
-		})
-	);
+	const sizeChoices = (
+		['01005', '0201', '0402', '0603', '0805', '1206', '1210', '2512', 'KRM55'] as const
+	).map((id) => ({
+		id,
+		label: EIA_CASE_SIZE_LABELS[id] ?? id
+	}));
 
 	function toggleGlobal<T extends string>(arr: T[], id: T) {
 		const idx = arr.indexOf(id);

@@ -5,8 +5,7 @@ Generate ``build/output/yageo-ac.xls`` from
 
 Yageo AC is the automotive-grade thick-film chip resistor family
 (AEC-Q200 qualified, MSL 1, J-STD-020D solder profile). Sizes
-0201..2512 in the public catalog; we carry 0201..1206 to match
-the rest of the library.
+0201..2512 in the public catalog; this importer carries 0201..1210.
 
 Datasheet: ``vendors/yageo/reference/PYU-AC_51_ROHS_L.pdf``
 (see ``../tools/scrape_yageo.py`` for how the orderable list was
