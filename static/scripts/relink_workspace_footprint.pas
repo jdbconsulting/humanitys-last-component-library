@@ -2,9 +2,9 @@
 {                                                                              }
 { relink_workspace_footprint.pas                                               }
 {                                                                              }
-{ Replace every footprint in the focused multi-component PcbLib editor with   }
-{ the same-named footprint from the other open PcbLib (house.PcbLib). Built   }
-{ for the Workspace footprint refresh workflow:                                }
+{ Update matching footprints in the focused multi-component PcbLib editor   }
+{ from the other open PcbLib (house.PcbLib). Unmatched footprints are kept.   }
+{ Workspace footprint refresh workflow:                                        }
 {                                                                              }
 {   1. Open build/output/house.PcbLib in Altium (File -> Open).               }
 {   2. In the Components / Explorer panel, multi-select the PCC items you     }
@@ -21,10 +21,10 @@
 {                                                                              }
 { Matching rule (case-insensitive):                                            }
 {   For each footprint in the focused (target) library, find the footprint    }
-{   with the same name in the other open PcbLib. 0 source matches or 2+       }
-{   source matches both abort the run; 1 source match replaces the target's   }
-{   primitives + Description/Height with the source's. The destination        }
-{   footprint's Name and managed-item metadata are preserved.                 }
+{   with the same name in the other open PcbLib. 0 matches skips the target  }
+{   unchanged and reports its name; 2+ matches still abort before editing.   }
+{   1 match replaces primitives + Description/Height. The target keeps its  }
+{   Name and all managed-item metadata.                                      }
 {                                                                              }
 { Source detection:                                                            }
 {   The script scans all documents currently open in Altium and picks the     }
@@ -44,7 +44,7 @@
 { reopen relink_workspace_footprint.PrjScr from the Projects panel.           }
 Procedure HelloWorld;
 Begin
-    ShowMessage('Hello from relink_workspace_footprint.pas v4.' + #13#10 +
+    ShowMessage('Hello from relink_workspace_footprint.pas v6.' + #13#10 +
                 'Script project loaded the latest .pas correctly.');
 End;
 
@@ -56,6 +56,7 @@ Function FindSourcePcbLib(TargetPath : String; Var SourcePath : String) : IPCB_L
 Var
     I            : Integer;
     ServerDoc    : IServerDocument;
+    PcbModule    : IServerModule;
     DocPath      : String;
     CandCount    : Integer;
     CandPath     : String;
@@ -68,13 +69,19 @@ Begin
     SourcePath := '';
     CandCount := 0;
 
-    { Iterate every document currently open in the Altium client. }
-    For I := 0 To Client.OpenedDocumentCount - 1 Do
+    { Enumerate documents through the PCB server module (IServerModule). }
+    { IClient does not expose OpenedDocumentCount / OpenedDocuments.       }
+    { API: www.altium.com/documentation/altium-dxp-developer/system-api   }
+    If Client = Nil Then Exit;
+    PcbModule := Client.GetServerModuleByName('PCB');
+    If PcbModule = Nil Then Exit;
+
+    For I := 0 To PcbModule.GetDocumentCount - 1 Do
     Begin
-        ServerDoc := Client.OpenedDocuments(I);
+        ServerDoc := PcbModule.GetDocuments(I);
         If ServerDoc = Nil Then Continue;
-        If UpperCase(ServerDoc.DM_DocumentKind) <> 'PCBLIB' Then Continue;
-        DocPath := ServerDoc.DM_FullPath;
+        If UpperCase(ServerDoc.GetKind) <> 'PCBLIB' Then Continue;
+        DocPath := ServerDoc.GetFileName;
         If UpperCase(DocPath) = UpperCase(TargetPath) Then Continue;
 
         Inc(CandCount);
@@ -283,8 +290,8 @@ End;
 { ----- Main entry point ---------------------------------------------------- }
 
 
-{ Replace every footprint in the focused multi-component PcbLib editor        }
-{ with the same-named footprint from the other open PcbLib (house.PcbLib).    }
+{ Update each uniquely matched footprint from the other open PcbLib.        }
+{ Missing source names are skipped unchanged and listed in the summary.     }
 { No-arg Procedure so Altium's Run Script picker invokes it directly without  }
 { prompting for a parameter value (parameter prompts can silently fail if      }
 { dismissed).                                                                  }
@@ -304,6 +311,9 @@ Var
     Tgt, Src         : IPCB_LibComponent;
     Iter             : IPCB_LibraryIterator;
     Errors           : String;
+    SkippedNames     : String;
+    SkippedCount     : Integer;
+    Summary          : String;
     Replaced         : Integer;
     TotalPrims       : Integer;
     PrimsThis        : Integer;
@@ -320,7 +330,7 @@ Begin
     { stale and a full close + reopen of the .PrjScr (or restart of Altium   }
     { Designer) is needed.                                                    }
     { ---------------------------------------------------------------------- }
-    ShowMessage('ReplaceManagedFootprints v4 starting. Click OK to continue.');
+    ShowMessage('ReplaceManagedFootprints v6 starting. Click OK to continue.');
 
     { -------- Resolve target = focused PcbLib editor. -------------------- }
     Workspace := GetWorkspace;
@@ -382,17 +392,11 @@ Begin
             ShowError('Focused library has 0 footprints. Nothing to update.');
             Exit;
         End;
-        If SourceCount = 0 Then
-        Begin
-            ShowError(ExtractFileName(SourcePath) + ' has 0 footprints. ' +
-                      'Did `python build.py house-pcblib` run successfully?');
-            Exit;
-        End;
-
-        { ---------- Pre-flight: collect every name-resolution problem      }
-        { before mutating anything, so we either update everything or       }
-        { nothing.                                                           }
-        Errors := '';
+        { ---------- Pre-flight: reject ambiguous names before editing.    }
+        { Missing source footprints are reported, not treated as errors.    }
+        Errors       := '';
+        SkippedNames := '';
+        SkippedCount := 0;
 
         { Target-side duplicates -- report each dupe set exactly once.      }
         For I := 0 To TargetCount - 1 Do
@@ -412,9 +416,10 @@ Begin
             NameUp := TargetNames[I];
             Dupes := CountName(SourceNames, NameUp);
             If Dupes = 0 Then
-                Errors := Errors + #13#10 + '  - ' + NameUp +
-                          ' (no match in ' +
-                          ExtractFileName(SourcePath) + ')';
+            Begin
+                Inc(SkippedCount);
+                SkippedNames := SkippedNames + #13#10 + '  - ' + NameUp;
+            End;
             If Dupes > 1 Then
                 Errors := Errors + #13#10 + '  - ' + NameUp +
                           ' (' + IntToStr(Dupes) + ' source matches; ' +
@@ -429,7 +434,17 @@ Begin
             Exit;
         End;
 
-        { ---------- Replace each target with its source counterpart. ----- }
+        If (SourceCount = 0) Or (SkippedCount = TargetCount) Then
+        Begin
+            ShowMessage('Updated 0 footprint(s). Skipped ' +
+                        IntToStr(SkippedCount) + ' footprint(s): no matches in ' +
+                        ExtractFileName(SourcePath) + '.' + #13#10 +
+                        'All target footprints were left unchanged.' +
+                        SkippedNames);
+            Exit;
+        End;
+
+        { ---------- Replace only targets that have a source counterpart. -- }
         Replaced   := 0;
         TotalPrims := 0;
         PCBServer.PreProcess;
@@ -444,13 +459,16 @@ Begin
                 While Tgt <> Nil Do
                 Begin
                     Src := FindFootprint(SourceLib, Tgt.Name);
-                    { Pre-flight already verified non-Nil + unique. }
-                    ClearAllPrimitives(Tgt);
-                    PrimsThis := ReplicatePrimitives(Src, Tgt);
-                    CopyFootprintFields(Src, Tgt);
+                    { Pre-flight verified uniqueness; missing sources skip. }
+                    If Src <> Nil Then
+                    Begin
+                        ClearAllPrimitives(Tgt);
+                        PrimsThis := ReplicatePrimitives(Src, Tgt);
+                        CopyFootprintFields(Src, Tgt);
 
-                    TotalPrims := TotalPrims + PrimsThis;
-                    Inc(Replaced);
+                        TotalPrims := TotalPrims + PrimsThis;
+                        Inc(Replaced);
+                    End;
 
                     Tgt := Iter.NextPCBObject;
                 End;
@@ -464,15 +482,21 @@ Begin
         TargetLib.Board.ViewManager_FullUpdate;
         Client.SendMessage('PCB:Zoom', 'Action=Redraw', 255, Client.CurrentView);
 
-        ShowMessage('Replaced ' + IntToStr(Replaced) + ' footprint(s) ' +
-                    '(' + IntToStr(TotalPrims) + ' primitives) from ' +
-                    ExtractFileName(SourcePath) + '.' +
-                    #13#10 + #13#10 +
-                    'Verify visually, then Save (Ctrl+S) the Footprint ' +
-                    'Library tab and right-click the project -> ' +
-                    'Save to Server. Leave "Update items related to" enabled ' +
-                    'in the Edit Revision dialog so all components that ' +
-                    'reference these footprints auto-bump.');
+        Summary := 'Updated ' + IntToStr(Replaced) + ' footprint(s) ' +
+                   '(' + IntToStr(TotalPrims) + ' primitives) from ' +
+                   ExtractFileName(SourcePath) + '.' + #13#10 +
+                   'Skipped ' + IntToStr(SkippedCount) + ' footprint(s).';
+        If SkippedCount > 0 Then
+            Summary := Summary + #13#10 + #13#10 +
+                       'Left unchanged (no matching source footprint):' +
+                       SkippedNames;
+        Summary := Summary + #13#10 + #13#10 +
+                   'Verify visually, then Save (Ctrl+S) the Footprint ' +
+                   'Library tab and right-click the project -> ' +
+                   'Save to Server. Leave "Update items related to" enabled ' +
+                   'in the Edit Revision dialog so all components that ' +
+                   'reference the updated footprints auto-bump.';
+        ShowMessage(Summary);
     Finally
         TargetNames.Free;
         SourceNames.Free;

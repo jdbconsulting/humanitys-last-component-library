@@ -1,5 +1,16 @@
 [
 	{
+		"version": "0.3.0",
+		"status": "unreleased",
+		"releasedOn": null,
+		"changes": [
+			"Use the Configuration File name for the Preview tab's Configuration JSON download.",
+			"Clarify that all other Altium document windows and tabs must be closed before updating managed footprints.",
+			"Fix Altium footprint update scripts to enumerate PCB documents through the documented server-module API and use the correct server-document properties.",
+			"Update matching managed footprints while skipping and reporting footprints missing from house.PcbLib; duplicate names still stop the sync before changes are made."
+		]
+	},
+	{
 		"version": "0.2.0",
 		"status": "released",
 		"releasedOn": "2026-09-17",
