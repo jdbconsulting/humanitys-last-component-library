@@ -313,6 +313,19 @@
 					"override_pad_radius": false
 				}
 			},
+			"vishay-crcw": {
+				"enabled": true,
+				"options": {
+					"enabled_densities": ["L", "N", "M"],
+					"sizes": ["0402", "0603", "0805", "1206", "1210", "1218", "2010", "2512"],
+					"override_pad_radius": 25
+				},
+				"overrides": {
+					"enabled_densities": false,
+					"sizes": false,
+					"override_pad_radius": false
+				}
+			},
 			"vishay-rcs": {
 				"enabled": true,
 				"options": {
@@ -400,7 +413,19 @@
 				"max_crosshair_half_arm_mm": 0.5,
 				"component_body_standoff_mm": 0,
 				"enabled_densities": ["L", "N", "M"],
-				"enabled_sizes": ["01005", "0201", "0402", "0603", "0805", "1206", "1210", "2512", "KRM55"]
+				"enabled_sizes": [
+					"01005",
+					"0201",
+					"0402",
+					"0603",
+					"0805",
+					"1206",
+					"1210",
+					"1218",
+					"2010",
+					"2512",
+					"KRM55"
+				]
 			},
 			"stepgen": {
 				"default_fillet_radius_mm": 0.05,

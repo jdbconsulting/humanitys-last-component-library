@@ -34,7 +34,7 @@ def find_part(family, mpn):
 class PassiveCatalogTests(unittest.TestCase):
     def test_all_catalog_rows_decode_and_have_distinct_mpns(self):
         for family in ('murata-gcd', 'murata-krm', 'kemet-x7r', 'kemet-open-mode',
-                       'kemet-esd-c0g', 'tdk-c', 'vishay-rcs', 'vishay-rcp',
+                       'kemet-esd-c0g', 'tdk-c', 'vishay-crcw', 'vishay-rcs', 'vishay-rcp',
                        'vishay-mc-precision', 'vishay-mc-at'):
             with self.subTest(family=family):
                 rows = catalog(family)
@@ -47,6 +47,11 @@ class PassiveCatalogTests(unittest.TestCase):
 
     def test_requested_values_and_ratings(self):
         cases = [
+            ('vishay-crcw','CRCW0603562RFKEA','562','1%','0.1W'),
+            ('vishay-crcw','CRCW04024K70JNED','4.7k','5%','0.063W'),
+            ('vishay-crcw','CRCW121810K0FKEK','10k','1%','1W'),
+            ('vishay-crcw','CRCW201010K0FKEF','10k','1%','0.75W'),
+            ('vishay-crcw','CRCW2512100RFKEG','100','1%','1W'),
             ('vishay-rcs','RCS08051R50FKEA','1.5','1%','0.5W'),
             ('vishay-rcs','RCS120633K0FKEA','33k','1%','0.5W'),
             ('vishay-mc-precision','MCS04020D2491BE000','2.49k','0.1%','0.063W'),
@@ -68,7 +73,14 @@ class PassiveCatalogTests(unittest.TestCase):
                 self.assertEqual((p.value,p.tolerance,p.power),(value,tolerance,power))
 
     def test_bad_ordering_codes_and_inconsistent_data_fail(self):
-        for family, mpn in [('vishay-rcs','RCS040210K0FKEA'),
+        for family, mpn in [('vishay-crcw','CRCW0603100RFKEB'),  # EB is not a CRCW reel
+                            ('vishay-crcw','CRCW12182M70FKEK'),  # 1218 stops at 2.2 Mohm
+                            ('vishay-crcw','CRCW06034K99JNEA'),  # 5% is E24 only
+                            ('vishay-crcw','CRCW060310R0FNEA'),  # 200 ppm 1% stops at 9.76 ohm
+                            ('vishay-crcw','CRCW06030K10FKEA'),  # non-canonical 100 ohm
+                            ('vishay-crcw','CRCW06031002FKEA'),  # no embedded unit
+                            ('vishay-crcw','CRCW06030000FKEA'),  # jumper needs Z0
+                            ('vishay-rcs','RCS040210K0FKEA'),
                             ('vishay-rcs','RCS08052491FKEA'),
                             ('vishay-mc-at','MCS04020D2491BE000'),
                             ('vishay-mc-precision','MCS04020D1004BE000'),
@@ -88,6 +100,34 @@ class PassiveCatalogTests(unittest.TestCase):
             p = resistor({'mpn':f'RCS{size}0000Z0{pack}'},'vishay-rcs')
             self.assertEqual((p.value,p.power,p.voltage,p.tcr),('0','','',''))
             self.assertIn('Imax='+current,p.features)
+
+    def test_rcs_lands_use_bottom_terminal(self):
+        for size,pack,bottom,top in [('0402','ED',.25,.2),('0603','EA',.3,.3),
+                                     ('0805','EA',.3,.3),('1206','EA',.45,.4)]:
+            g = resistor({'mpn':f'RCS{size}10K0FK{pack}'},'vishay-rcs').geometry
+            self.assertEqual((g['bodyMm']['terminalLengthNominal'],
+                              g['model']['topTerminalLengthMm']),(bottom,top))
+
+    def test_crcw_jumpers_ratings_and_terminals(self):
+        for size,pack,current in [('0402','ED','1.5A'),('0603','EA','2A'),('0805','EA','2.5A'),
+                                  ('1206','EA','3.5A'),('1210','EA','5A'),('1218','EK','7A'),
+                                  ('2010','EF','6A'),('2512','EG','7A')]:
+            p = resistor({'mpn':f'CRCW{size}0000Z0{pack}'},'vishay-crcw')
+            self.assertEqual((p.value,p.power,p.voltage,p.tcr),('0','','',''))
+            self.assertIn('Imax='+current,p.features)
+        # 0402-0805 advertise standard-mode ratings, not the extended-mode table.
+        p = resistor({'mpn':'CRCW08051K00FKEA'},'vishay-crcw')
+        self.assertEqual((p.power,p.voltage,p.qualification),('0.125W','150V','AEC-Q200'))
+        self.assertIn('standard operation mode',p.conditions)
+        p = resistor({'mpn':'CRCW06031R00FNEA'},'vishay-crcw')
+        self.assertEqual((p.tolerance,p.tcr),('1%','+/-200'))
+        # T1 (bottom) sets the lands; T2 (top) only shapes the 3D model.
+        for size,pack,root,bottom,top in [('0402','ED','RESC1005X40_CRCW',.25,.2),
+                                          ('1218','EK','RESC3246X60_CRCW',.45,.4),
+                                          ('2512','EG','RESC6332X70_CRCW',.6,.6)]:
+            g = resistor({'mpn':f'CRCW{size}10K0FK{pack}'},'vishay-crcw').geometry
+            self.assertEqual((g['root'],g['bodyMm']['terminalLengthNominal'],
+                              g['model']['topTerminalLengthMm']),(root,bottom,top))
 
     def test_era_a_keeps_mixed_codes(self):
         mod = load_module(str(ROOT/'hlcl/vendors/panasonic/era-a/panasonic-era-a.py'))
