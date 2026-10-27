@@ -2,12 +2,12 @@
 	"id": "vishay-crcw",
 	"name": "Vishay CRCW",
 	"manufacturer": "Vishay",
-	"summary": "AEC-Q200 standard thick film; 1% / 100 ppm, 5% / 200 ppm and jumpers.",
+	"summary": "Standard thick film (AEC-Q200 from 0402); 1% and 5% plus jumpers.",
 	"kind": "resistor",
 	"subtype_id": "vishay-crcw",
 	"subtype_label": "Vishay CRCW",
 	"subtype_order": 30,
 	"sort_order": 30,
-	"available_sizes": ["0402", "0603", "0805", "1206", "1210", "1218", "2010", "2512"],
+	"available_sizes": ["0201", "0402", "0603", "0805", "1206", "1210", "1218", "2010", "2512"],
 	"options": []
 }

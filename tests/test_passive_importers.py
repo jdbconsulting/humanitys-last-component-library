@@ -5,6 +5,7 @@ The generated-artifact audit additionally requires python hlcl/build.py all.
 """
 import copy
 import csv
+import dataclasses
 import json
 import sys
 import unittest
@@ -14,6 +15,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT/'hlcl'), str(ROOT/'hlcl/vendors'), str(ROOT/'hlcl/house')]
 import _common
+from _passives import RESISTOR_HEADERS
 from _catalog_passives import decode as capacitor
 from _vishay_passives import decode as resistor
 from build import load_module
@@ -47,6 +49,8 @@ class PassiveCatalogTests(unittest.TestCase):
 
     def test_requested_values_and_ratings(self):
         cases = [
+            ('vishay-crcw','CRCW02011K00FKED','1k','1%','0.05W'),
+            ('vishay-crcw','CRCW020110R0FNED','10','1%','0.05W'),
             ('vishay-crcw','CRCW0603562RFKEA','562','1%','0.1W'),
             ('vishay-crcw','CRCW04024K70JNED','4.7k','5%','0.063W'),
             ('vishay-crcw','CRCW121810K0FKEK','10k','1%','1W'),
@@ -80,6 +84,10 @@ class PassiveCatalogTests(unittest.TestCase):
                             ('vishay-crcw','CRCW06030K10FKEA'),  # non-canonical 100 ohm
                             ('vishay-crcw','CRCW06031002FKEA'),  # no embedded unit
                             ('vishay-crcw','CRCW06030000FKEA'),  # jumper needs Z0
+                            ('vishay-crcw','CRCW020146R4FKED'),  # 0201 100 ppm starts at 47 ohm
+                            ('vishay-crcw','CRCW02011K00FKEA'),  # EA is not a 0201 reel
+                            ('vishay-crcw','CRCW02019R10JNED'),  # 0201 5% below 10 ohm is JX
+                            ('vishay-crcw','CRCW04021R00FXED'),  # X TCR is 0201 only
                             ('vishay-rcs','RCS040210K0FKEA'),
                             ('vishay-rcs','RCS08052491FKEA'),
                             ('vishay-mc-at','MCS04020D2491BE000'),
@@ -109,7 +117,7 @@ class PassiveCatalogTests(unittest.TestCase):
                               g['model']['topTerminalLengthMm']),(bottom,top))
 
     def test_crcw_jumpers_ratings_and_terminals(self):
-        for size,pack,current in [('0402','ED','1.5A'),('0603','EA','2A'),('0805','EA','2.5A'),
+        for size,pack,current in [('0201','ED','1A'),('0402','ED','1.5A'),('0603','EA','2A'),('0805','EA','2.5A'),
                                   ('1206','EA','3.5A'),('1210','EA','5A'),('1218','EK','7A'),
                                   ('2010','EF','6A'),('2512','EG','7A')]:
             p = resistor({'mpn':f'CRCW{size}0000Z0{pack}'},'vishay-crcw')
@@ -121,13 +129,39 @@ class PassiveCatalogTests(unittest.TestCase):
         self.assertIn('standard operation mode',p.conditions)
         p = resistor({'mpn':'CRCW06031R00FNEA'},'vishay-crcw')
         self.assertEqual((p.tolerance,p.tcr),('1%','+/-200'))
+        # 0201 has its own commercial datasheet: no AEC-Q200, 50 mOhm jumper.
+        p = resistor({'mpn':'CRCW02014R70FXED'},'vishay-crcw')
+        self.assertEqual((p.tcr,p.voltage,p.qualification),('-200/+400','30V',''))
+        self.assertIn('20052',p.datasheet)
+        self.assertIn('<=50mOhm',resistor({'mpn':'CRCW02010000Z0ED'},'vishay-crcw').features)
         # T1 (bottom) sets the lands; T2 (top) only shapes the 3D model.
-        for size,pack,root,bottom,top in [('0402','ED','RESC1005X40_CRCW',.25,.2),
+        for size,pack,root,bottom,top in [('0201','ED','RESC0603X26_CRCW',.15,.1),
+                                          ('0402','ED','RESC1005X40_CRCW',.25,.2),
                                           ('1218','EK','RESC3246X60_CRCW',.45,.4),
                                           ('2512','EG','RESC6332X70_CRCW',.6,.6)]:
             g = resistor({'mpn':f'CRCW{size}10K0FK{pack}'},'vishay-crcw').geometry
             self.assertEqual((g['root'],g['bodyMm']['terminalLengthNominal'],
                               g['model']['topTerminalLengthMm']),(root,bottom,top))
+
+    def test_crcw_rows_follow_the_database_standard(self):
+        def row(mpn):
+            with patch.object(_common,'density_codes',return_value=('L','N','M')):
+                cells = resistor({'mpn':mpn},'vishay-crcw').standard_cells('vishay-crcw')
+            return dict(zip(RESISTOR_HEADERS,cells))
+        r = row('CRCW06034K70JNEA')
+        self.assertEqual(len(r),len(RESISTOR_HEADERS))
+        self.assertEqual((r['Description'],r['MFG'],r['Package'],r['Value'],r['Tolerance'],
+                          r['Voltage'],r['Tcr'],r['Tr'],r['Qual'],r['Library Ref']),
+                         ('RESISTOR THICK FILM 4.7K OHM 5% 0603','VISHAY','0603','4.7k','5%',
+                          '75V','+/-200','-55:155','AEC-Q200','RES'))
+        self.assertEqual([r[f'Footprint Ref{n}'] for n in ('',' 2',' 3')],
+                         ['RESC1608X50_CRCWN','RESC1608X50_CRCWL','RESC1608X50_CRCWM'])
+        self.assertEqual(row('CRCW02012M20FNED')['Description'],'RESISTOR THICK FILM 2.2M OHM 1% 0201')
+        self.assertEqual(row('CRCW0402100RFKED')['Description'],'RESISTOR THICK FILM 100 OHM 1% 0402')
+        self.assertEqual(row('CRCW04020000Z0ED')['Description'],'RESISTOR JUMPER 0 OHM 0402')
+        bad = dataclasses.replace(resistor({'mpn':'CRCW04024K70JNED'},'vishay-crcw'),value='4.7k\u03a9')
+        with self.assertRaises(ValueError):
+            bad.standard_cells('vishay-crcw')
 
     def test_era_a_keeps_mixed_codes(self):
         mod = load_module(str(ROOT/'hlcl/vendors/panasonic/era-a/panasonic-era-a.py'))

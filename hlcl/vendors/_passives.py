@@ -25,6 +25,15 @@ HEADERS = [
     "Footprint Path", "Footprint Ref", "Footprint Path 2", "Footprint Ref 2",
     "Footprint Path 3", "Footprint Ref 3",
 ]
+# Database standard (website docs: /docs/database-standards): common fields,
+# then resistor fields, then supplemental columns the standard does not cover.
+RESISTOR_HEADERS = [
+    "Comment", "Description", "MFG", "MPN", "Package", "Library Path",
+    "Library Ref", "Footprint Path", "Footprint Ref", "Footprint Path 2",
+    "Footprint Ref 2", "Footprint Path 3", "Footprint Ref 3", "Qual",
+    "Value", "Tolerance", "Voltage", "Tcr", "Tr",
+    "Power", "Features", "Rating Conditions", "Datasheet",
+]
 
 
 def number(value) -> str:
@@ -79,6 +88,8 @@ class Part:
     conditions: str
     datasheet: str
     geometry: dict = field(compare=False)
+    construction: str = ""  # e.g. "THICK FILM"; required by standard_cells
+
 
     def cells(self, family):
         symbol = "CAP" if self.kind == "C" else "RES"
@@ -88,6 +99,25 @@ class Part:
                 self.qualification, self.voltage, self.power, self.features,
                 self.conditions, self.datasheet, "house.SchLib", symbol,
                 *_common.xls_footprint_columns("house.PcbLib", self.geometry["root"], family)]
+
+    def standard_cells(self, family):
+        """RESISTOR_HEADERS row; rejects rows that break the database standard."""
+        if self.kind != "R" or not self.construction:
+            raise ValueError(f"{self.mpn}: the standard schema needs a resistor construction")
+        if self.value == "0":
+            description = f"RESISTOR JUMPER 0 OHM {self.package}"
+        else:
+            description = (f"RESISTOR {self.construction} {self.value.upper()} OHM "
+                           f"{self.tolerance} {self.package}")
+        cells = [self.mpn, description, self.manufacturer.upper(), self.mpn,
+                 self.package.upper(), "house.SchLib", "RES",
+                 *_common.xls_footprint_columns("house.PcbLib", self.geometry["root"], family),
+                 self.qualification, self.value, self.tolerance, self.voltage, self.tcr,
+                 self.temperature, self.power, self.features, self.conditions, self.datasheet]
+        if (description != description.upper() or description.endswith(".")
+                or not all(cell.isascii() for cell in cells)):
+            raise ValueError(f"{self.mpn}: row violates the database standard: {cells!r}")
+        return cells
 
 
 def body(prefix, metric, height, qualifier, length, width, terminal, source, **extra):
@@ -108,8 +138,11 @@ def read_csv(path):
         return list(csv.DictReader(stream))
 
 
-def run(family, sheet_name, parts):
-    """Validate first, then emit an offline workbook, DbLib and footprint set."""
+def run(family, sheet_name, parts, standard=False):
+    """Validate first, then emit an offline workbook, DbLib and footprint set.
+
+    ``standard`` selects RESISTOR_HEADERS and Part.standard_cells.
+    """
     enabled = _common.enabled_sizes(family)
     seen, geometries, accepted = set(), {}, []
     for part in parts:
@@ -129,10 +162,11 @@ def run(family, sheet_name, parts):
         _common._validate_footprint(fp)
     wb = xlwt.Workbook()
     sheet = wb.add_sheet(sheet_name)
-    for col, heading in enumerate(HEADERS):
+    for col, heading in enumerate(RESISTOR_HEADERS if standard else HEADERS):
         sheet.write(0, col, heading)
     for row, part in enumerate(sorted(accepted, key=lambda p: p.mpn), 1):
-        for col, cell in enumerate(part.cells(family)):
+        cells = part.standard_cells(family) if standard else part.cells(family)
+        for col, cell in enumerate(cells):
             sheet.write(row, col, cell)
     output = ROOT / "build" / "output"
     output.mkdir(parents=True, exist_ok=True)
@@ -143,7 +177,7 @@ def run(family, sheet_name, parts):
     print(f"{family}: {len(accepted)} parts, {len(footprints)} footprints")
 
 
-def csv_main(family, sheet, default_input, decoder):
+def csv_main(family, sheet, default_input, decoder, standard=False):
     parser = argparse.ArgumentParser(description=f"Build {family} from a verified offline catalog")
     parser.add_argument("--input", default=str(default_input))
     args = parser.parse_args()
@@ -155,4 +189,4 @@ def csv_main(family, sheet, default_input, decoder):
                 parts.append(part)
         except (ValueError, KeyError, ArithmeticError) as exc:
             raise ValueError(f"{args.input}:{line}: {exc}") from exc
-    run(family, sheet, parts)
+    run(family, sheet, parts, standard)

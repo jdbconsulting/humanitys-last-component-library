@@ -8,6 +8,7 @@ import re
 from _passives import Part, body, code_value, number, resistance
 
 CRCW = 'https://www.vishay.com/docs/20035/dcrcwe3.pdf'
+CRCW0201 = 'https://www.vishay.com/docs/20052/crcw0201e3.pdf'
 RCS = 'https://www.vishay.com/docs/20065/rcse3.pdf'
 RCP = 'https://www.vishay.com/docs/31098/rcp.pdf'
 MC = 'https://www.vishay.com/docs/28700/mcx0x0xpre.pdf'
@@ -17,15 +18,17 @@ E24 = (10,11,12,13,15,16,18,20,22,24,27,30,33,36,39,43,47,51,56,62,68,75,82,91)
 
 def decode(row, family):
     mpn = row['mpn']
-    extra = {}
+    extra, construction = {}, ''
     if family == 'vishay-crcw':
-        m = re.fullmatch(r'CRCW(0402|0603|0805|1206|1210|1218|2010|2512)([0-9RKM]{4})(FK|FN|JN|Z0)(E[A-K])', mpn)
+        m = re.fullmatch(r'CRCW(0201|0402|0603|0805|1206|1210|1218|2010|2512)([0-9RKM]{4})([FJ][KNX]|Z0)(E[A-K])', mpn)
         if not m:
             raise ValueError(f'invalid CRCW code: {mpn}')
         size, code, grade, packing = m.groups()
         # Bottom terminal T1 drives the lands; top terminal T2 is model-only.
         # 0402-0805 use standard-mode P70/Umax, not the extended-mode ratings.
+        # 0201 is a separate commercial datasheet without AEC-Q200.
         metric,L,W,H,T,top,power,voltage,upper,imax,packs = {
+            '0201': ('0603',.6,.3,.26,.15,.1,.05,30,10000000,'1A',('ED','EE','EI')),
             '0402': ('1005',1,.5,.40,.25,.2,.063,50,10000000,'1.5A',('ED','EE')),
             '0603': ('1608',1.55,.85,.50,.3,.3,.1,75,10000000,'2A',('EA','EC','ED','EE','EI')),
             '0805': ('2012',2,1.25,.60,.3,.3,.125,150,10000000,'2.5A',('EA','EC')),
@@ -35,26 +38,31 @@ def decode(row, family):
             '2010': ('5025',5,2.5,.70,.6,.6,.75,400,10000000,'6A',('EF',)),
             '2512': ('6332',6.3,3.15,.70,.6,.6,1,500,10000000,'7A',('EG','EH')),
         }[size]
+        ranges = ({'FK': (47, 1000000), 'FN': (10, upper), 'FX': (1, Decimal('9.76')),
+                   'JN': (10, upper), 'JX': (1, Decimal('9.1'))} if size == '0201' else
+                  {'FK': (1, upper), 'FN': (1, Decimal('9.76')), 'JN': (1, upper)})
         if code != '0000' and (code[0] == '0' or sum(c in 'RKM' for c in code) != 1):
             raise ValueError(f'{mpn}: CRCW requires one embedded resistance unit and no leading zero')
         value = code_value(code)
-        if grade == 'FN':
-            upper = Decimal('9.76')
-        if packing not in packs or (grade == 'Z0') != (code == '0000') or (value and not 1 <= value <= upper):
+        lower, upper = ranges.get(grade, (0, 0))
+        if packing not in packs or (grade == 'Z0') != (code == '0000') or (value and not lower <= value <= upper):
             raise ValueError(f'invalid CRCW range/packing: {mpn}')
-        if grade == 'JN' and value.scaleb(1 - value.adjusted()) not in E24:
+        if grade[0] == 'J' and value.scaleb(1 - value.adjusted()) not in E24:
             raise ValueError(f'{mpn}: CRCW 5% values are E24 only')
-        tol,tcr = {'FK':('1%','+/-100'), 'FN':('1%','+/-200'),
-                   'JN':('5%','+/-200'), 'Z0':('','')}[grade]
-        source,qual,temp,features = CRCW,'AEC-Q200','-55:155','thick film'
+        tol = {'F': '1%', 'J': '5%', 'Z': ''}[grade[0]]
+        tcr = {'K': '+/-100', 'N': '+/-200', 'X': '-200/+400', '0': ''}[grade[1]]
+        source = CRCW0201 if size == '0201' else CRCW
+        qual,temp,features = '' if size == '0201' else 'AEC-Q200','-55:155','thick film'
         mode = ('P70 standard operation mode; extended mode not advertised'
                 if size in ('0402','0603','0805') else 'P70 ambient rating')
-        conditions = mode + '; derate above 70 C; working voltage <= min(Umax, sqrt(P*R)); see pulse curves'
+        conditions = mode + '; derate above 70 C; working voltage <= min(Umax, sqrt(P*R))'
+        if size != '0201':
+            conditions += '; see pulse curves'
         if not value:
             power, voltage = '', ''
-            features += '; jumper <=20mOhm; Imax=' + imax
+            features += f"; jumper <={50 if size == '0201' else 20}mOhm; Imax=" + imax
             conditions = 'Jumper current must meet datasheet thermal conditions'
-        qualifier = 'CRCW'
+        qualifier, construction = 'CRCW', 'THICK FILM'
         extra['model'] = {'type': 'wide-bottom', 'topTerminalLengthMm': top}
     elif family == 'vishay-rcs':
         m = re.fullmatch(r'RCS(0402|0603|0805|1206)([0-9RKM]{4})(FK|DK|JN|Z0)(E[A-C]|E[D-I])', mpn)
@@ -136,4 +144,4 @@ def decode(row, family):
     geom = body('RESC',metric,H,qualifier,L,W,T,source+'; maximum height; nominal L/W and terminals',**extra)
     return Part(mpn,'Vishay',size,'R',resistance(value),tol,tcr,temp,qual,
                 number(voltage)+'V' if voltage != '' else '',number(power)+'W' if power != '' else '',
-                features,conditions,source,geom)
+                features,conditions,source,geom,construction)

@@ -7,19 +7,19 @@ land patterns, embedded STEP models, and PcbLib.
 
 ## Initial catalog scope
 
-| Build target          | Initial scope                                                                                                                  |  Rows |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----: |
-| `murata-gcd`          | Active GCD188/GCD21B PIM catalog; 0603 paper D and 0805 embossed L packaging; X7R plus one X7S entry                           |   109 |
-| `murata-krm`          | KRM55QR72A106KH01, L/K packaging                                                                                               |     2 |
-| `kemet-open-mode`     | Verified automotive open-mode X7R codes, 0603/1210                                                                             |     2 |
-| `kemet-esd-c0g`       | Verified automotive C0G ESD code, 0805                                                                                         |     1 |
-| `kemet-x7r`           | Verified commercial X7R codes, 0402/0805                                                                                       |     2 |
-| `tdk-c`               | Verified commercial X7R C1005/C3225 codes, 0402/1210                                                                           |     2 |
-| `vishay-crcw`         | E24/E96 1%/100 ppm and E24 5%/200 ppm, 1 ohm–10 Mohm (1218: 2.2 Mohm), plus jumpers; 0402–2512; one valid reel format per size | 7,658 |
-| `vishay-rcs`          | E24/E96, 1 ohm–10 Mohm, 1%/100 ppm, plus jumpers; 0402–1206; one valid reel format per size                                    | 3,200 |
-| `vishay-rcp`          | Two verified wide-terminal codes, 0603/2512; decoder also supports reviewed 1206 geometry                                      |     2 |
-| `vishay-mc-precision` | MC version 0, 0.1%/25 ppm; E24/E96 subset of the published E24/E192 range; 0402–1206                                           | 1,882 |
-| `vishay-mc-at`        | MC version M, 0.1%/25 ppm; E24/E96 subset of the published E24/E192 range; 0402–1206                                           | 2,226 |
+| Build target          | Initial scope                                                                                                                                                            |  Rows |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----: |
+| `murata-gcd`          | Active GCD188/GCD21B PIM catalog; 0603 paper D and 0805 embossed L packaging; X7R plus one X7S entry                                                                     |   109 |
+| `murata-krm`          | KRM55QR72A106KH01, L/K packaging                                                                                                                                         |     2 |
+| `kemet-open-mode`     | Verified automotive open-mode X7R codes, 0603/1210                                                                                                                       |     2 |
+| `kemet-esd-c0g`       | Verified automotive C0G ESD code, 0805                                                                                                                                   |     1 |
+| `kemet-x7r`           | Verified commercial X7R codes, 0402/0805                                                                                                                                 |     2 |
+| `tdk-c`               | Verified commercial X7R C1005/C3225 codes, 0402/1210                                                                                                                     |     2 |
+| `vishay-crcw`         | 1% E24/E96 and 5% E24 at the lowest-TCR grade per value, 1 ohm–10 Mohm (1218: 2.2 Mohm), plus jumpers; 0201–2512; one valid reel format per size; database-standard rows | 8,627 |
+| `vishay-rcs`          | E24/E96, 1 ohm–10 Mohm, 1%/100 ppm, plus jumpers; 0402–1206; one valid reel format per size                                                                              | 3,200 |
+| `vishay-rcp`          | Two verified wide-terminal codes, 0603/2512; decoder also supports reviewed 1206 geometry                                                                                |     2 |
+| `vishay-mc-precision` | MC version 0, 0.1%/25 ppm; E24/E96 subset of the published E24/E192 range; 0402–1206                                                                                     | 1,882 |
+| `vishay-mc-at`        | MC version M, 0.1%/25 ppm; E24/E96 subset of the published E24/E192 range; 0402–1206                                                                                     | 2,226 |
 
 CRCW, RCS and MC lists describe combinations permitted by their ordering tables;
 they are **not distributor stock or availability assertions**. Other new
@@ -38,6 +38,7 @@ include the new families and sizes; focused presets retain their selections.
 | Source                                                                                                                                                                                                                                                                                                                                                                               | Reviewed details                                                                                                                                                                                |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [Vishay D/CRCW e3, document 20035](https://www.vishay.com/docs/20035/dcrcwe3.pdf), 14-Apr-2026                                                                                                                                                                                                                                                                                       | F/J tolerance with K/N TCR, size-specific packing, jumper current, standard/extended P70 ratings, T1 bottom/T2 top terminals and AEC-Q200.                                                      |
+| [Vishay CRCW0201 e3, document 20052](https://www.vishay.com/docs/20052/crcw0201e3.pdf), 21-Sep-2022                                                                                                                                                                                                                                                                                  | Commercial 0201: K/N/X TCR grades and their ranges, 0.05 W/30 V, 50 mOhm/1 A jumper, ED/EE/EI packing, T1 bottom/T2 top terminals. No AEC-Q200 claim.                                           |
 | [Vishay RCS, document 20065](https://www.vishay.com/docs/20065/rcse3.pdf), 11-Jun-2025                                                                                                                                                                                                                                                                                               | Resistance/tolerance/TCR combinations, size-specific packing, jumper current, P70 ratings, top/bottom terminal dimensions and derating.                                                         |
 | [Vishay RCP, document 31098](https://www.vishay.com/docs/31098/rcp.pdf), 10-Aug-2021                                                                                                                                                                                                                                                                                                 | W/B terminal geometry, manufacturer's recommended lands, 10–2,000 ohm range, packing and thermal conditions.                                                                                    |
 | [Vishay MC Precision, document 28700](https://www.vishay.com/docs/28700/mcx0x0xpre.pdf), 02-Dec-2025                                                                                                                                                                                                                                                                                 | Version 0, resistance-code exponent, 0.1%/25 ppm limits, precision-mode ratings, IECQ-CECC and dimensions.                                                                                      |
@@ -62,6 +63,18 @@ mode, which permits twice the 1000 h drift. The decoder accepts the 1%/200 ppm
 `FN` grade only for 1–9.76 ohm; the default catalog omits it because `FK` covers
 the same values. CRCW and RCS lands use the bottom terminal T1; the top terminal
 T2 only shapes the model. CRCW 1218 and 2010 add those sizes to the global case-size list.
+
+CRCW 0201 comes from a separate commercial datasheet without AEC-Q200, so its
+`Qual` is blank. No single 0201 grade spans 1 ohm–10 Mohm. The catalog uses the
+lowest TCR offered for each value: `FK` for 47 ohm–1 Mohm, `FN`/`JN` for
+10 ohm–10 Mohm otherwise, and `FX`/`JX` (-200/+400 ppm) below 10 ohm.
+
+CRCW workbooks follow the website's database standard (`/docs/database-standards/`).
+`csv_main(..., standard=True)` writes the standard columns in order, then Power,
+Features, Rating Conditions and Datasheet. Descriptions read
+`RESISTOR THICK FILM 4.7K OHM 5% 0603`, or `RESISTOR JUMPER 0 OHM 0402` for jumpers.
+A non-ASCII field, a description that is not all caps, or one ending in a period
+fails the build. Other datasheet-backed families still use the legacy layout.
 
 RCS uses ambient **P70**, not the higher terminal-temperature rating. MC AT uses
 the **general operating mode** at P70 and a 125 C film limit; higher-power modes
