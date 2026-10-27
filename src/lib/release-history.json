@@ -1,5 +1,19 @@
 [
 	{
+		"version": "0.3.0",
+		"status": "released",
+		"releasedOn": "2026-10-27",
+		"changes": [
+			"Add the Vishay CRCW standard thick-film family: 7,658 component entries from 0402 to 2512, covering 1% (E24/E96) and 5% (E24) grades and 0 Ω jumpers.",
+			"Add 1218 (3246) and 2010 (5025) package selections. The full default library now has 66,723 component entries, 348 footprints (including L/N/M density variants), and 28 families.",
+			"Correct Vishay RCS 0402 and 1206 land patterns to use the datasheet's bottom terminal length. The pad gap shrinks by 0.10 mm and the 3D models no longer swap the top and bottom terminal bands. Footprint names are unchanged, so refresh existing libraries with the footprint update script.",
+			"Use the Configuration File name for the Preview tab's Configuration JSON download.",
+			"Clarify that all other Altium document windows and tabs must be closed before updating managed footprints.",
+			"Fix Altium footprint update scripts to enumerate PCB documents through the documented server-module API and use the correct server-document properties.",
+			"Update matching managed footprints while skipping and reporting footprints missing from house.PcbLib; duplicate names still stop the sync before changes are made."
+		]
+	},
+	{
 		"version": "0.2.0",
 		"status": "released",
 		"releasedOn": "2026-09-17",

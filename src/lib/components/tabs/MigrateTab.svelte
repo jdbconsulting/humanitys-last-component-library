@@ -142,13 +142,21 @@
 						The <code class="rounded bg-ink-100 px-1 py-0.5 font-mono text-xs"
 							>update_library_footprints.pas</code
 						>
-						script walks every footprint in the focused multi-component PcbLib editor and replaces its
-						geometry (all 2D/3D primitives, Description, Height) with the same-named footprint from the
-						other open PcbLib (<code class="rounded bg-ink-100 px-1 py-0.5 font-mono text-xs"
-							>house.PcbLib</code
+						script walks every footprint in the focused multi-component PcbLib editor and replaces each
+						matching footprint's geometry (all 2D/3D primitives, Description, Height) with the same-named
+						footprint from the other open PcbLib (<code
+							class="rounded bg-ink-100 px-1 py-0.5 font-mono text-xs">house.PcbLib</code
 						>). The footprint <strong>Name</strong> and all managed-item metadata (Item Revision, Source,
 						Revision State) are preserved — Altium owns those.
 					</p>
+					<div
+						class="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800"
+					>
+						<strong class="font-semibold">Close all other Altium document windows and tabs</strong>
+						before running the script. Keep only the source
+						<code class="font-mono">house.PcbLib</code> and the target managed Footprint Library open,
+						with the target focused.
+					</div>
 
 					<div class="mt-5">
 						<h4 class="text-xs font-semibold tracking-wider text-ink-600 uppercase">
@@ -178,7 +186,7 @@
 							Per-batch workflow (repeat after each build)
 						</h4>
 						<ol class="mt-2 space-y-2 text-sm text-ink-700">
-							{#each ['Components / Explorer panel → multi-select the PCC items you want to refresh (Ctrl-click / Shift-click) → right-click → Edit. Altium opens a single "Footprint Library [Footprints] (N)" tab. Click that tab so it\'s the focused document.', "File → Run Script… → in the Select Item to Run dialog, pick ReplaceManagedFootprints from update_library_footprints.pas. The script inventories both libraries, pre-flights every name and bails out with a full error list on any mismatch, then replaces every target footprint's primitives and ends with a confirmation dialog.", 'Visually verify the geometry against the source.', 'Ctrl+S to save the Footprint Library tab.', 'In the Projects panel, right-click the project → Save to Server. In the Edit Revision dialog, leave ✓ Update items related to enabled. Every PCC item in the batch gets a new revision, and every Workspace Component that references one of them auto-bumps (no manual relink on the CMP side).'] as step, i (i)}
+							{#each ['Components / Explorer panel → multi-select the PCC items you want to refresh (Ctrl-click / Shift-click) → right-click → Edit. Altium opens a single "Footprint Library [Footprints] (N)" tab. Click that tab so it\'s the focused document.', 'File → Run Script… → in the Select Item to Run dialog, pick ReplaceManagedFootprints from update_library_footprints.pas. The script checks both libraries for ambiguous duplicate names, then updates footprints with a unique source match. Footprints missing from house.PcbLib are left unchanged. The completion dialog reports the updated and skipped counts and lists skipped names.', 'Visually verify the geometry against the source.', 'Ctrl+S to save the Footprint Library tab.', 'In the Projects panel, right-click the project → Save to Server. In the Edit Revision dialog, leave ✓ Update items related to enabled. Every PCC item in the batch gets a new revision, and every Workspace Component that references one of them auto-bumps (no manual relink on the CMP side).'] as step, i (i)}
 								<li class="flex items-start gap-3">
 									<span
 										class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-100 text-[10px] font-semibold text-accent-800"

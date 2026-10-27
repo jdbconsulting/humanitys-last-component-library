@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { appState } from '$lib/state.svelte';
 	import { consoleLog } from '$lib/console.svelte';
+	import { sanitizeConfigFilenameStem } from '$lib/config-filename';
 	import {
 		computeBuildPlan,
 		formatOptionValue,
@@ -14,6 +15,7 @@
 	const buildPlan = $derived(computeBuildPlan(config));
 	const enabledFamilies = $derived(summarizeEnabledFamilies(config));
 	const configJson = $derived(JSON.stringify(config, null, 2));
+	const configFilename = $derived(`${sanitizeConfigFilenameStem(appState.ui.config_name)}.json`);
 
 	const stageColors: Record<BuildStep['stage'], string> = {
 		vendor: 'bg-navy-100 text-navy-800 ring-navy-200',
@@ -306,7 +308,7 @@
 				<button
 					type="button"
 					class="rounded-md border border-ink-200 bg-white px-3 py-1.5 text-xs font-medium text-ink-700 shadow-sm hover:bg-ink-50"
-					onclick={() => downloadText('hlcl-configuration.json', 'application/json', configJson)}
+					onclick={() => downloadText(configFilename, 'application/json', configJson)}
 				>
 					Download
 				</button>

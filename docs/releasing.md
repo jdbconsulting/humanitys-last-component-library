@@ -5,9 +5,8 @@ deploys to production only when a stable `vX.Y.Z` tag is pushed (or an existing
 release tag is manually redeployed). Pushing `dev`, merging a pull request, or
 running a local production build does not deploy the website.
 
-The first versioned development cycle is **0.2.0-dev**, with **0.2.0 unreleased**
-until promotion. The original website
-is recorded retrospectively as **0.1.0**; its release date is not known. Adding
+The first versioned release is **0.2.0**, published on **2026-09-17**. The original
+website is recorded retrospectively as **0.1.0**; its release date is not known. Adding
 that history entry does not create a historical Git tag or GitHub Release.
 
 ## Sources of truth
@@ -35,9 +34,9 @@ These commands validate metadata; they do not commit, tag, publish, or deploy.
 
 ## Commit development work
 
-Keep feature work and fixes on `dev` (or merge feature branches into `dev`). For
-the current cycle, keep `package.json` at `0.2.0-dev` and the 0.2.0 history entry
-unreleased with a null date. Add user-visible changes to that entry as work lands.
+Keep feature work and fixes on `dev` (or merge feature branches into `dev`). Keep
+`package.json` at `X.Y.Z-dev` and the matching `X.Y.Z` history entry unreleased
+with a null date. Add user-visible changes to that entry as work lands.
 
 Before committing:
 
@@ -57,10 +56,11 @@ release history"`. Include new files; leave unrelated local edits and generated
 `build/` output out of the commit. Push with `git push -u origin dev` when ready
 to share the work. Dev CI validates and archives the website without deploying it.
 
-## Promote 0.2.0 to production
+## Promotion example: 0.2.0
 
-Run these steps only when the release is ready. Start with committed development
-work and a clean working tree.
+Run these steps only when the release is ready. Substitute the upcoming version
+for 0.2.0, which has already been released; never reuse its tag. Start with
+committed development work and a clean working tree.
 
 1. Prepare release metadata on `dev`:
 
