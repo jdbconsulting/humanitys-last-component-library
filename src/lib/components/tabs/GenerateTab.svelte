@@ -1,5 +1,6 @@
 <script lang="ts">
 	import JSZip from 'jszip';
+	import { tick } from 'svelte';
 	import { appState } from '$lib/state.svelte';
 	import { consoleLog } from '$lib/console.svelte';
 	import {
@@ -13,18 +14,28 @@
 	import { saveBlobAs } from '$lib/texapi';
 	import { sanitizeConfigFilenameStem } from '$lib/config-filename';
 	import SectionHeader from '../SectionHeader.svelte';
+	import WorkbookViewer from '../WorkbookViewer.svelte';
 
 	type BuildStatus = 'idle' | 'running' | 'success' | 'error';
 	let buildStatus = $state<BuildStatus>('idle');
 	let buildOutputs = $state<BuildOutputFile[]>([]);
 	let buildError = $state<string | null>(null);
 	let zipping = $state(false);
+	let viewingPath = $state<string | null>(null);
+	let viewerAnchor = $state<HTMLElement | undefined>();
+
+	async function viewWorkbook(file: BuildOutputFile) {
+		viewingPath = file.path;
+		await tick();
+		viewerAnchor?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	}
 
 	async function onRunBuild() {
 		if (buildStatus === 'running') return;
 		buildStatus = 'running';
 		buildError = null;
 		buildOutputs = [];
+		viewingPath = null;
 		const t0 = Date.now();
 		// Snapshot the config we're handing to the build; we'll cache
 		// the stats against THIS exact config (not the live one, which
@@ -324,6 +335,27 @@
 											<span class="shrink-0 font-mono text-[11px] text-ink-500">
 												{formatBytes(file.size)}
 											</span>
+											{#if file.path.endsWith('.xls')}
+												<button
+													type="button"
+													class={[
+														'shrink-0 rounded p-1 hover:bg-navy-50 hover:text-navy-700',
+														viewingPath === file.path ? 'text-navy-700' : 'text-ink-400'
+													]}
+													title="View columns and rows of {file.path}"
+													aria-label="View {file.path}"
+													onclick={() => viewWorkbook(file)}
+												>
+													<svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+														<path d="M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" />
+														<path
+															fill-rule="evenodd"
+															d="M.66 10.59a1.65 1.65 0 010-1.18C2.07 5.7 5.73 3 10 3s7.93 2.7 9.34 6.41c.15.38.15.8 0 1.18C17.93 14.3 14.27 17 10 17S2.07 14.3.66 10.59zM14 10a4 4 0 11-8 0 4 4 0 018 0z"
+															clip-rule="evenodd"
+														/>
+													</svg>
+												</button>
+											{/if}
 											<button
 												type="button"
 												class="shrink-0 rounded p-1 text-ink-400 hover:bg-navy-50 hover:text-navy-700"
@@ -409,3 +441,9 @@
 		{/if}
 	</aside>
 </div>
+
+{#if viewingPath}
+	<div bind:this={viewerAnchor} class="mt-6 scroll-mt-24">
+		<WorkbookViewer path={viewingPath} onclose={() => (viewingPath = null)} />
+	</div>
+{/if}

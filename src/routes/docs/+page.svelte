@@ -73,6 +73,17 @@
 			</span>
 		</a>
 	</li>
+	<li>
+		<a
+			href={resolve('/docs/database-standards/')}
+			class="group block rounded-lg border border-ink-200 bg-ink-50/50 p-4 transition hover:border-navy-300 hover:bg-white"
+		>
+			<span class="font-semibold text-navy-900 group-hover:text-navy-800">Database standards</span>
+			<span class="mt-1 block text-sm text-ink-600">
+				Description formats, parameter conventions, and the columns in every generated workbook.
+			</span>
+		</a>
+	</li>
 </ul>
 
 <section

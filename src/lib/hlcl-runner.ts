@@ -337,6 +337,34 @@ json.dumps(build_stats.compute_build_stats(${pyStr(HLCL_ROOT)}))
 	return JSON.parse(String(result)) as BuildStats;
 }
 
+/** One worksheet of a generated `.xls`, every cell rendered as text. */
+export interface WorkbookSheet {
+	name: string;
+	headers: string[];
+	rows: string[][];
+}
+
+/**
+ * Read a generated `.xls` back with xlrd (already installed for
+ * `build_stats`) so the workbook viewer shows exactly what was written,
+ * rather than a JS re-implementation of the vendor scripts.
+ */
+export async function readWorkbook(relPath: string): Promise<WorkbookSheet[]> {
+	const py = await getPyodide();
+	const result = await py.runPythonAsync(`
+import json, xlrd
+book = xlrd.open_workbook(${pyStr(`${HLCL_ROOT}/build/output/${relPath}`)})
+def text(v):
+    return format(v, 'g') if isinstance(v, float) else str(v)
+sheets = []
+for sh in book.sheets():
+    rows = [[text(v) for v in sh.row_values(r)] for r in range(sh.nrows)]
+    sheets.append({'name': sh.name, 'headers': rows[0] if rows else [], 'rows': rows[1:]})
+json.dumps(sheets)
+`);
+	return JSON.parse(String(result)) as WorkbookSheet[];
+}
+
 /** Read a single artifact's raw bytes out of MEMFS for download / zipping. */
 export async function readOutputBytes(relPath: string): Promise<Uint8Array> {
 	const py = await getPyodide();
