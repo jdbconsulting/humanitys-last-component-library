@@ -55,36 +55,37 @@ FOOTPRINT_ROOTS = [
 ]
 
 
-def build_table():
-    table = [pc.HEADERS]
+def build_records():
+    """Database-standard row dicts (see vendors/_standard.py) in workbook order."""
+    table = []
 
     # ERA-2VEB (0402)
     table += pc.make_era_range("Panasonic", "ERA-2VEB", "X",
-        pc.era_47_100K, "1/10W", "75V",
+        pc.era_47_100K, "0.1W", "75V",
         "0.1%", "+/-25", "-55:155", "AEC-Q200 GRADE 0", "0402", "RES", pc.SCHLIB,
         "RESC1005X35", VENDOR_KEY)
 
     # ERA-3VEB (0603)
     table += pc.make_era_range("Panasonic", "ERA-3VEB", "V",
-        pc.era_47_100K, "1/8W", "100V",
+        pc.era_47_100K, "0.125W", "100V",
         "0.1%", "+/-25", "-55:155", "AEC-Q200 GRADE 0", "0603", "RES", pc.SCHLIB,
         "RESC1608X45", VENDOR_KEY)
 
     # ERA-3KEB (0603) - high-resistance extension
     table += pc.make_era_range("Panasonic", "ERA-3KEB", "V",
-        pc.era_102K_330K, "1/8W", "100V",
+        pc.era_102K_330K, "0.125W", "100V",
         "0.1%", "+/-25", "-55:155", "AEC-Q200 GRADE 0", "0603", "RES", pc.SCHLIB,
         "RESC1608X45", VENDOR_KEY)
 
     # ERA-6VEB (0805)
     table += pc.make_era_range("Panasonic", "ERA-6VEB", "V",
-        pc.era_47_100K, "1/4W", "150V",
+        pc.era_47_100K, "0.25W", "150V",
         "0.1%", "+/-25", "-55:155", "AEC-Q200 GRADE 0", "0805", "RES", pc.SCHLIB,
         "RESC2012X55", VENDOR_KEY)
 
     # ERA-6KEB (0805) - high-resistance extension
     table += pc.make_era_range("Panasonic", "ERA-6KEB", "V",
-        pc.era_102K_820K, "1/4W", "150V",
+        pc.era_102K_820K, "0.25W", "150V",
         "0.1%", "+/-25", "-55:155", "AEC-Q200 GRADE 0", "0805", "RES", pc.SCHLIB,
         "RESC2012X55", VENDOR_KEY)
 
@@ -95,13 +96,14 @@ def build_table():
     return table
 
 
+def build_table():
+    """Header row plus standard-column rows (used by the tests)."""
+    return pc.as_table(build_records())
+
+
 def main():
-    table = build_table()
     wb = xlwt.Workbook()
-    sheet = wb.add_sheet(SHEET)
-    for x, line in enumerate(table):
-        for y, data in enumerate(line):
-            sheet.write(x, y, data)
+    pc.write_sheet(wb.add_sheet(SHEET), VENDOR_KEY, build_records())
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(FOOTPRINTS_DIR, exist_ok=True)

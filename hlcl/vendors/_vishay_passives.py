@@ -89,7 +89,7 @@ def decode(row, family):
             power, voltage = '', ''
             features += '; jumper <=20mOhm; Imax=' + {'0402':'3A','0603':'3.5A','0805':'4A','1206':'5A'}[size]
             conditions = 'Jumper current must meet datasheet thermal conditions'
-        qualifier = 'RCS'
+        qualifier, construction = 'RCS', 'THICK FILM'
         extra['model'] = {'type': 'wide-bottom', 'topTerminalLengthMm':
                           {'0402': .2, '0603': .3, '0805': .3, '1206': .4}[size]}
     elif family == 'vishay-rcp':
@@ -113,7 +113,7 @@ def decode(row, family):
         extra = {'model':{'type':'wide-bottom','topTerminalLengthMm':top},
                  'landPatternMm':{'padLength':widepad if terminal=='W' else normalpad,
                                   'padWidth':padw, 'gap':widegap if terminal=='W' else normalgap}}
-        qualifier = 'RCP'+terminal
+        qualifier, construction = 'RCP'+terminal, 'THICK FILM'
     elif family in ('vishay-mc-precision','vishay-mc-at'):
         m = re.fullmatch(r'(MCS0402|MCT0603|MCU0805|MCA1206)(0|M)D(\d{4})B(E0|P5|PW)00', mpn)
         if not m:
@@ -138,7 +138,7 @@ def decode(row, family):
         tol,tcr,qual,temp = '0.1%','+/-25','AEC-Q200' if at else 'IECQ-CECC','-55:125'
         source,features = (MCAT,'thin film; automotive') if at else (MC,'thin film; precision')
         conditions = 'P70 general operating mode, film <=125 C; higher power modes require separate drift/thermal review' if at else 'P70 precision operating mode, film <=125 C'
-        qualifier = 'MCAT' if at else 'MCP'
+        qualifier, construction = ('MCAT' if at else 'MCP'), 'THIN FILM'
     else:
         raise ValueError(f'unknown Vishay family: {family}')
     geom = body('RESC',metric,H,qualifier,L,W,T,source+'; maximum height; nominal L/W and terminals',**extra)

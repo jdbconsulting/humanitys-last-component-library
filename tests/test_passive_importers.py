@@ -15,7 +15,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT/'hlcl'), str(ROOT/'hlcl/vendors'), str(ROOT/'hlcl/house')]
 import _common
-from _passives import RESISTOR_HEADERS
+import _standard
 from _catalog_passives import decode as capacitor
 from _vishay_passives import decode as resistor
 from build import load_module
@@ -146,11 +146,10 @@ class PassiveCatalogTests(unittest.TestCase):
     def test_crcw_rows_follow_the_database_standard(self):
         def row(mpn):
             with patch.object(_common,'density_codes',return_value=('L','N','M')):
-                cells = resistor({'mpn':mpn},'vishay-crcw').standard_cells('vishay-crcw')
-            return dict(zip(RESISTOR_HEADERS,cells))
+                record = resistor({'mpn':mpn},'vishay-crcw').record('vishay-crcw')
+            return dict(zip(_standard.headers('R',[]),_standard.cells('R',[],record)))
         r = row('CRCW06034K70JNEA')
-        self.assertEqual(len(r),len(RESISTOR_HEADERS))
-        self.assertEqual(RESISTOR_HEADERS[13:],['Qual','Value','Tolerance','Voltage','Tcr','Tr'])
+        self.assertEqual(list(r)[13:],['Qual','Value','Tolerance','Voltage','Tcr','Tr'])
         self.assertEqual((r['Description'],r['MFG'],r['Package'],r['Value'],r['Tolerance'],
                           r['Voltage'],r['Tcr'],r['Tr'],r['Qual'],r['Library Ref']),
                          ('RESISTOR THICK FILM 4.7K OHM 5% 0603','VISHAY','0603','4.7k','5%',
@@ -162,7 +161,7 @@ class PassiveCatalogTests(unittest.TestCase):
         self.assertEqual(row('CRCW04020000Z0ED')['Description'],'RESISTOR JUMPER 0 OHM 0402')
         bad = dataclasses.replace(resistor({'mpn':'CRCW04024K70JNED'},'vishay-crcw'),value='4.7k\u03a9')
         with self.assertRaises(ValueError):
-            bad.standard_cells('vishay-crcw')
+            _standard.cells('R',[],bad.record('vishay-crcw'))
 
     def test_era_a_keeps_mixed_codes(self):
         mod = load_module(str(ROOT/'hlcl/vendors/panasonic/era-a/panasonic-era-a.py'))
@@ -181,10 +180,10 @@ class PassiveCatalogTests(unittest.TestCase):
         for base, size, suffixes, height in [('CL10B223KC8WPN','0603',('C','D'),90),
                                            ('CL31B474KCHWPN','1206',('E','F'),180)]:
             row, root, _ = mod.build_row(base,{size})
-            self.assertEqual(row[mod.HEADERS.index('Qual')],'AEC-Q200')
-            self.assertEqual([row[mod.HEADERS.index(f'MPN {n}')] for n in (2,3)],
+            self.assertEqual(row['Qual'],'AEC-Q200')
+            self.assertEqual([row[f'MPN {n}'] for n in (2,3)],
                              [base+s for s in suffixes])
-            self.assertEqual(row[mod.HEADERS.index('MPN 4')],'')
+            self.assertEqual(row['MPN 4'],'')
             self.assertTrue(root.endswith(f'X{height}_SAMA'))
 
     def test_manufacturer_pad_geometry_survives_density_expansion(self):

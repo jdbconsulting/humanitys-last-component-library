@@ -11,7 +11,7 @@ def decode(row):
     return decode_catalog(row, FAMILY)
 
 def main():
-    csv_main(FAMILY, "crcw", HERE / "parts.csv", decode, standard=True)
+    csv_main(FAMILY, "crcw", HERE / "parts.csv", decode)
 
 if __name__ == "__main__":
     main()

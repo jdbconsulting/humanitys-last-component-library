@@ -50,25 +50,27 @@ FOOTPRINT_ROOTS = [
 ]
 
 
-def build_table():
-    table = [pc.HEADERS]
+def build_records():
+    """Database-standard row dicts (see vendors/_standard.py) in workbook order."""
+    table = []
 
     # ERA-8PEB (1206)
     table += pc.make_era_range("Panasonic", "ERA-8PEB", "V",
-        pc.era_160K_1M, "1/4W", "500V",
+        pc.era_160K_1M, "0.25W", "500V",
         "0.1%", "+/-25", "-55:155", "AEC-Q200 GRADE 0", "1206", "RES", pc.SCHLIB,
         "RESC3216X55", VENDOR_KEY)
 
     return table
 
 
+def build_table():
+    """Header row plus standard-column rows (used by the tests)."""
+    return pc.as_table(build_records())
+
+
 def main():
-    table = build_table()
     wb = xlwt.Workbook()
-    sheet = wb.add_sheet(SHEET)
-    for x, line in enumerate(table):
-        for y, data in enumerate(line):
-            sheet.write(x, y, data)
+    pc.write_sheet(wb.add_sheet(SHEET), VENDOR_KEY, build_records())
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(FOOTPRINTS_DIR, exist_ok=True)

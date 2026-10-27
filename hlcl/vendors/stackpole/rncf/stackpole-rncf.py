@@ -55,6 +55,7 @@ if _STACKPOLE_DIR not in sys.path:
 
 import _common as _vendor_common      # noqa: E402
 import _dblib as _vendor_dblib        # noqa: E402
+import _standard                      # noqa: E402
 import _stackpole_common as sc        # noqa: E402
 
 VENDOR_KEY = "stackpole-rncf"
@@ -93,10 +94,8 @@ def main() -> int:
 
     wb = xlwt.Workbook()
     sheet = wb.add_sheet(SHEET)
-    for col, h in enumerate(sc.HEADERS):
-        sheet.write(0, col, h)
 
-    row_idx = 0
+    records = []
     skipped = Counter()
     eia_counts = Counter()
     used_roots: set[str] = set()
@@ -109,7 +108,7 @@ def main() -> int:
                 family_id=FAMILY_ID,
                 size_to_footprint=sc.SIZE_TO_FOOTPRINT_THIN,
                 qualifications=_qualifications(r.get("aecq200", "")),
-                description_kind="THIN FILM",
+                construction="THIN FILM",
             )
             if built is None:
                 eia = r.get("size", "")
@@ -119,12 +118,16 @@ def main() -> int:
                     skipped[f"size {eia}: outside library support"] += 1
                 continue
 
-            row, fp_root, eia = built
-            row_idx += 1
-            for col, cell in enumerate(row):
-                sheet.write(row_idx, col, cell)
+            record, fp_root, eia = built
+            records.append(record)
             eia_counts[eia] += 1
             used_roots.add(fp_root)
+
+    # Database-standard columns, then whichever supported extras
+    # (Power) the family enabled; raises on any rule violation.
+    row_idx = _standard.write_sheet(
+        sheet, sc.KIND, FAMILY_ID, records, supported=sc.SUPPORTED_EXTRAS,
+    )
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(FOOTPRINTS_DIR, exist_ok=True)

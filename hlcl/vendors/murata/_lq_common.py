@@ -33,14 +33,15 @@ This module hosts the bits both LQ family scripts need:
   ``N`` in place of ``R`` to flag a nano-henry value (``2N2`` ->
   2.2 nH, ``18N`` -> 18 nH).
 * :func:`decode_tolerance` -- single-letter tolerance code -> the
-  human-readable ``"+/-X%"`` / ``"+/-X nH"`` form. The mapping is
+  database-standard ``"X%"`` / ``"+/-X nH"`` form. The mapping is
   documented in the inductor part-numbering reference.
-* :func:`format_inductance` -- 1.0 -> ``"1.0uH"``, 0.001 -> ``"1nH"``,
-  220.0 -> ``"220uH"``. Mirrors the convention the other vendor
-  scripts use to render values in the .xls Description column.
-* :func:`row_for_part` -- single-row builder shared by both family
-  scripts, returning the ``(row, fp_root, sheet_name)`` tuple ready
-  for the .xls writer.
+* :func:`inductance_nh` -- the decoded inductance in nH, ready for
+  :func:`_standard.inductance`.
+* :func:`parse_tokens` -- Q / DCR / SRF / rated current from the
+  spec-PDF table cells that follow the MPN.
+* :func:`row_for_part` -- single-record builder shared by both family
+  scripts, returning the ``(record, fp_root, sheet_name)`` tuple ready
+  for :func:`_standard.write_sheet`.
 * :func:`build_footprint_rows` -- wraps the standard density-fanout
   helper so each family script just hands in its set of footprint
   roots.
@@ -48,6 +49,7 @@ This module hosts the bits both LQ family scripts need:
 
 from __future__ import annotations
 
+from decimal import Decimal
 import os
 import re
 import sys
@@ -61,35 +63,23 @@ if _VENDORS_DIR not in sys.path:
     sys.path.insert(0, _VENDORS_DIR)
 
 import _common  # noqa: E402  -- vendors/_common.py
+import _standard  # noqa: E402  -- vendors/_standard.py
 
 
-# --- Manufacturer name ----------------------------------------------------
-# Plain "Murata" matches what the other Murata families (GCM, GRM,
-# BLM) emit, and what Altium's Part Choices database query expects.
-MFG = "Murata"
+# Database standard: manufacturer names are upper case.
+MFG = "MURATA"
 
 SCHLIB = r"house.SchLib"
 PCBLIB = r"house.PcbLib"
 
 
-# --- .xls column schema --------------------------------------------------
-# Inductor variant of the standard schema. Keeps the same Library /
-# Footprint slots as the resistor and capacitor families (so the
-# DbLib FieldMap stays uniform), but trades the resistor-specific
-# ``Tolerance / Tcr / Voltage / Power`` quartet for the inductor-
-# specific ``Inductance / Tolerance / DCR / Current / SRF / Q``
-# parameters. Empty cells are tolerated downstream -- LQM rows leave
-# Q blank (multilayer LQM doesn't characterise Q on the spec PDFs)
-# and LQW rows leave DCR-typ + I-Lchg blank.
-HEADERS = [
-    "Comment", "Description", "MFG", "MPN", "Package",
-    "Inductance", "Tolerance", "DCR", "Current", "SRF", "Q",
-    "Tr", "Qual",
-    "Library Path", "Library Ref",
-    "Footprint Path", "Footprint Ref",
-    "Footprint Path 2", "Footprint Ref 2",
-    "Footprint Path 3", "Footprint Ref 3",
-]
+# --- Database standard ---------------------------------------------------
+# Rows carry the standard inductor columns (see ``_standard``) plus the
+# two extras the spec tables give: SRF for both families and Q (min) for
+# the wirewound LQW parts (multilayer LQM tables don't list Q, so it
+# stays blank there).
+KIND = "I"
+SUPPORTED_EXTRAS = ("srf", "q")
 
 
 # --- Per-subseries geometry ----------------------------------------------
@@ -245,189 +235,108 @@ def decode_inductance(mpn: str, base: str) -> tuple[float, str] | None:
     return float(value), "uH"
 
 
-# Murata LQ tolerance code (4th char after the 3-char value code).
+# Murata LQ tolerance code (4th char after the 3-char value code), in
+# database-standard form (percent without "+/-", absolute with a unit).
 # From the part-numbering reference:
 TOLERANCE_LETTER: Mapping[str, str] = {
     "B": "+/-0.1nH",
     "C": "+/-0.2nH",
     "D": "+/-0.5nH",
-    "F": "+/-1%",
-    "G": "+/-2%",
-    "H": "+/-3%",
-    "J": "+/-5%",
-    "K": "+/-10%",
-    "M": "+/-20%",
-    "N": "+/-30%",
+    "F": "1%",
+    "G": "2%",
+    "H": "3%",
+    "J": "5%",
+    "K": "10%",
+    "M": "20%",
+    "N": "30%",
     "S": "+/-0.3nH",
     "W": "+/-0.05nH",
 }
 
 
 def decode_tolerance(mpn: str, base: str) -> str:
-    """``("LQM21PN1R0MGEL", "LQM21PN") -> "+/-20%"``. Returns ``""``
+    """``("LQM21PN1R0MGEL", "LQM21PN") -> "20%"``. Returns ``""``
     if the byte at the expected tolerance position isn't a known
-    code letter -- callers can then fall back to whatever the spec-
-    PDF tail tokens carried, but in practice every orderable Murata
-    LQ MPN uses one of the documented codes."""
+    code letter; in practice every orderable Murata LQ MPN uses one
+    of the documented codes."""
     pos = len(base) + 3
     if pos >= len(mpn):
         return ""
     return TOLERANCE_LETTER.get(mpn[pos], "")
 
 
-def format_inductance(value: float, unit: str) -> str:
-    """``(1.0, "uH") -> "1.0uH"``; ``(2.2, "nH") -> "2.2nH"``;
-    ``(220.0, "uH") -> "220uH"``. Strips trailing ``.0`` for integer-
-    valued results so the description column reads cleanly."""
-    if abs(value - round(value)) < 1e-9:
-        text = f"{int(round(value))}"
-    else:
-        text = f"{value:g}"
-    return f"{text}{unit}"
+def inductance_nh(mpn: str, base: str) -> Decimal | None:
+    """``("LQM21PN1R0MGEL", "LQM21PN") -> Decimal("1000")``, or ``None``
+    if the value code doesn't decode."""
+    decoded = decode_inductance(mpn, base)
+    if decoded is None:
+        return None
+    value, unit = decoded
+    nh = Decimal(str(value))
+    return nh * 1000 if unit == "uH" else nh
 
 
-# --- Best-effort decoding of the post-MPN PDF tokens ----------------------
+# --- Decoding the post-MPN spec-PDF tokens --------------------------------
+# ``tokens`` holds the table cells that followed the MPN on its spec-PDF
+# row. Layouts vary by subseries, but always run
+#
+#   inductance, tolerance cell(s), [Q min (LQW only)], DCR [typ, max],
+#   SRF min, rated current(s), [footnote markers]
+#
+# and units vary too: most tables give DCR in ohms, SRF in MHz and
+# current in mA, but some LQM tables print the DCR typ/max pair in
+# milliohms and currents in amps (always with a decimal point), and the
+# LQW03 / LQW04 / LQW15A tables give SRF in GHz.
 
-_NUM_RE = re.compile(r"^[\d.]+$")
-_DCR_WITH_TOL_RE = re.compile(r"^([\d.]+)±[\d.]+%?$")
-
-
-def _is_num(tok: str) -> bool:
-    return bool(_NUM_RE.match(tok))
-
-
-def _strip_inline_tol(tok: str) -> str:
-    """``"0.07±25%"`` -> ``"0.07"``; ``"1.05±0.32"`` -> ``"1.05"``.
-    Some Murata spec PDFs glue the DCR tolerance band onto the DCR
-    value as ``"0.07±25%"`` (no spaces), causing pypdf to emit them
-    as a single token. Strip the trailing ``±..."`` so callers can
-    parse the leading numeric for cataloging."""
-    m = _DCR_WITH_TOL_RE.match(tok)
-    if m:
-        return m.group(1)
-    if "±" in tok:
-        return tok.split("±", 1)[0]
-    return tok
+_TOLERANCE_TOKEN_RE = re.compile(r"^[A-Z]?\s*[:：]?\s*(±[\d.]*\s*(%|nH)?)?$|^nH$")
+_NUMBER_RE = re.compile(r"^\d+(\.\d+)?$")
+#: Subseries whose spec tables give the self-resonant frequency in GHz.
+SRF_GHZ_SUBSERIES = frozenset({"LQW03AW", "LQW04AN", "LQW15AN", "LQW15AW"})
 
 
-def parse_lqm_tokens(tokens: list[str]) -> dict[str, str]:
-    """Best-effort decode of an LQM_ part row's post-MPN tokens.
+def _numbers(tokens: list[str]) -> list[str]:
+    """Numeric cells after the tolerance, with PDF-extraction damage undone."""
+    i = 1  # token 0 is the inductance
+    while i < len(tokens) and _TOLERANCE_TOKEN_RE.match(tokens[i]):
+        i += 1  # "M", "J:", "：±20%", "±0.2", "nH", ...
+    cells: list[str] = []
+    for tok in tokens[i:]:
+        if cells and cells[-1].endswith(".") and tok.isdigit():
+            cells[-1] += tok  # "0.|50" -> "0.50"
+        else:
+            cells.append(tok.split("±", 1)[0])  # "0.12±25%" -> "0.12"
+    # Zero is the tail of a split "±2|0" tolerance, never a reading.
+    nums = [c for c in cells if _NUMBER_RE.match(c) and Decimal(c) != 0]
+    # Trailing small integers are footnote markers ("10|4", "6"), not ratings.
+    while nums and "." not in nums[-1] and int(nums[-1]) <= 10:
+        nums.pop()
+    return nums
 
-    The LQM_ spec PDFs use at least four column-layout flavours
-    across subseries (full L-change + temperature-rise quartet vs
-    truncated max-only doublet, with and without inline DCR
-    tolerances; with and without a tolerance-letter column). Rather
-    than trying to discriminate per-subseries, we walk the token
-    list with a simple state machine: skip the leading inductance +
-    tolerance token(s), then peel off DCR / SRF / I_rated by token
-    shape (a small float < 50 = DCR; the next number = SRF in MHz;
-    one or more trailing currents).
 
-    Returns a dict with possibly-empty ``dcr_max_ohm``,
-    ``srf_min_mhz``, ``rated_current_max_ma`` strings."""
-    out = {"dcr_max_ohm": "", "srf_min_mhz": "", "rated_current_max_ma": ""}
-    if not tokens:
+def parse_tokens(tokens: list[str], base: str) -> dict:
+    """Decode a spec-PDF row: ``q`` (text, ``""`` if absent) plus
+    ``dcr`` (ohms), ``srf_mhz`` and ``amps`` as Decimals (``None`` if
+    absent). Where a table gives several rated currents (inductance
+    change vs temperature rise, 85 vs 125 C) the largest is kept."""
+    nums = _numbers(tokens)
+    out = {"q": "", "dcr": None, "srf_mhz": None, "amps": None}
+    if base.startswith("LQW") and nums and "." not in nums[0] and int(nums[0]) >= 5:
+        out["q"] = nums.pop(0)  # LQW tables lead with Q (min), an integer
+    if not nums:
         return out
-    # Drop the inductance (token 0) and any tolerance tokens (which
-    # are letters or contain ``±``).
-    rest: list[str] = []
-    for i, t in enumerate(tokens):
-        if i == 0:
-            continue
-        if i == 1 and ("±" in t or t in TOLERANCE_LETTER or t.endswith("%")):
-            # Letter-only ("M"), bare ±20, or full ±20% tolerance --
-            # all consumed; the tolerance is recovered from the MPN.
-            continue
-        if i == 2 and (
-            "±" in t or t.endswith("%") or t in {":", "：", ":±", "："}
-        ):
-            # Some flavours print "M ：±20%" with the tol pct in a
-            # third token, or just "±20" / "20%" alone.
-            continue
-        rest.append(t)
-    rest = [_strip_inline_tol(t) for t in rest]
-    nums = [t for t in rest if _is_num(t)]
-    # Heuristic mapping:
-    #   nums[0] = DCR_typ (sometimes); nums[1] = DCR_max
-    #   following number with magnitude > 5 = SRF (MHz)
-    #   then rated currents
-    if len(nums) >= 2 and float(nums[0]) < 5 and float(nums[1]) < 5 \
-            and float(nums[0]) <= float(nums[1]):
-        # DCR_typ + DCR_max layout (LQM_*_GE flavour)
-        out["dcr_max_ohm"] = nums[1]
-        nums = nums[2:]
-    elif nums:
-        out["dcr_max_ohm"] = nums[0]
-        nums = nums[1:]
+    dcr = Decimal(nums.pop(0))
+    if base.startswith("LQM") and nums and dcr <= Decimal(nums[0]) < dcr * Decimal("1.6"):
+        # LQM typ + max DCR pair (max is ~1.25x typ): keep the max.
+        dcr = Decimal(nums.pop(0))
+        if dcr >= 10:
+            dcr /= 1000  # the pair is printed in milliohms
+    out["dcr"] = dcr
     if nums:
-        out["srf_min_mhz"] = nums[0]
-        nums = nums[1:]
+        srf = Decimal(nums.pop(0))
+        out["srf_mhz"] = srf * 1000 if base in SRF_GHZ_SUBSERIES else srf
     if nums:
-        # First rated-current column is most relevant for cataloging
-        # (the temperature-rise-derived max). Track largest seen.
-        try:
-            largest = max(float(t) for t in nums if _is_num(t))
-            out["rated_current_max_ma"] = f"{largest:g}"
-        except ValueError:
-            pass
-    return out
-
-
-def parse_lqw_tokens(tokens: list[str]) -> dict[str, str]:
-    """Best-effort decode of an LQW_ part row's post-MPN tokens.
-
-    LQW_ rows are simpler than LQM_: ``L_nH tol_letter? : tol Q DCR
-    SRF I_rated`` is the common form. Q is unique to LQW (wirewound
-    RF parts characterise it; multilayer LQM doesn't). Returns
-    ``q_min``, ``dcr_max_ohm``, ``srf_min_mhz``, ``rated_current_ma``."""
-    out = {
-        "q_min": "",
-        "dcr_max_ohm": "",
-        "srf_min_mhz": "",
-        "rated_current_ma": "",
-    }
-    if not tokens:
-        return out
-    rest: list[str] = []
-    for i, t in enumerate(tokens):
-        if i == 0:
-            continue
-        if i <= 3 and (
-            "±" in t or t.endswith(("%", "nH"))
-            or t in TOLERANCE_LETTER
-            or t in {":", "：", "J:", "K:", "G:", "M:", "D:", "C:", "B:", "F:", "S:", "H:", "W:", "N:"}
-        ):
-            continue
-        rest.append(t)
-    rest = [_strip_inline_tol(t) for t in rest]
-    nums = [t for t in rest if _is_num(t)]
-    # Heuristic:
-    #   First number = Q (typ small int < 200).
-    #   Second = DCR (small float < 5 ohm typically).
-    #   Third = SRF (MHz, typically 100-50000).
-    #   Fourth = I_rated (mA, typically 50-2000).
-    if nums:
-        try:
-            v = float(nums[0])
-            # If it looks like a Q value (integer-ish, > 5), assume Q.
-            # Otherwise, no Q column on this row -- treat as DCR.
-            if v == int(v) and v >= 5:
-                out["q_min"] = nums[0]
-                nums = nums[1:]
-        except ValueError:
-            pass
-    if nums:
-        out["dcr_max_ohm"] = nums[0]
-        nums = nums[1:]
-    if nums:
-        out["srf_min_mhz"] = nums[0]
-        nums = nums[1:]
-    if nums:
-        try:
-            largest = max(float(t) for t in nums if _is_num(t))
-            out["rated_current_ma"] = f"{largest:g}"
-        except ValueError:
-            pass
+        amps = max(Decimal(n) for n in nums)
+        out["amps"] = amps if any("." in n for n in nums) else amps / 1000
     return out
 
 
@@ -438,12 +347,13 @@ def row_for_part(
     *,
     family_id: str,
     is_lqm: bool,
-) -> tuple[list, str, str] | None:
-    """Build one .xls row for a CSV row.
+) -> tuple[dict, str, str] | None:
+    """Build one database-standard record for a CSV row.
 
-    Returns ``(row, fp_root, sheet_name)`` on success, ``None`` if
+    Returns ``(record, fp_root, sheet_name)`` on success, ``None`` if
     the row should be dropped (unknown subseries geometry, undecodable
-    MPN, or disabled by the active BuildConfig).
+    MPN, or disabled by the active BuildConfig). ``record`` is keyed by
+    column name: every standard inductor column plus the SRF / Q extras.
 
     ``fp_root`` is the IPC root sans density suffix (e.g.
     ``INDC2012X55``). ``sheet_name`` is the per-EIA worksheet the
@@ -462,35 +372,30 @@ def row_for_part(
     mpn = csv_row.get("mpn", "").strip()
     if not mpn:
         return None
-    decoded = decode_inductance(mpn, base)
-    if decoded is None:
+    nh = inductance_nh(mpn, base)
+    if nh is None:
         return None
-    value, unit = decoded
     tolerance = decode_tolerance(mpn, base)
+    if not tolerance:
+        raise ValueError(f"{mpn}: unknown tolerance code {mpn[len(base) + 3:][:1]!r}")
 
     height_code = _format_height_code(geom["height_mm"])
     fp_root = f"INDC{geom['metric']}X{height_code}"
     fp_cells = _common.xls_footprint_columns(PCBLIB, fp_root, family_id)
 
-    inductance_str = format_inductance(value, unit)
-    description = (
-        f"INDUCTOR {'MULTILAYER' if is_lqm else 'WIREWOUND'} "
-        f"{inductance_str} {tolerance or 'TOL'} {eia}"
-    )
-
     tokens = (csv_row.get("tokens") or "").split("|") if csv_row.get("tokens") else []
-    if is_lqm:
-        params = parse_lqm_tokens(tokens)
-        dcr = params["dcr_max_ohm"]
-        current_ma = params["rated_current_max_ma"]
-        srf = params["srf_min_mhz"]
-        q = ""
+    params = parse_tokens(tokens, base)
+    value = _standard.inductance(nh)
+    dcr = "" if params["dcr"] is None else _standard.dcr(params["dcr"])
+    current = "" if params["amps"] is None else _standard.current(params["amps"])
+    srf = "" if params["srf_mhz"] is None else _standard.number(params["srf_mhz"]) + "MHz"
+
+    construction = "MULTILAYER" if is_lqm else "WIREWOUND"
+    if dcr:
+        description = _standard.inductor_description(construction, value, tolerance, dcr, eia)
     else:
-        params = parse_lqw_tokens(tokens)
-        dcr = params["dcr_max_ohm"]
-        current_ma = params["rated_current_ma"]
-        srf = params["srf_min_mhz"]
-        q = params["q_min"]
+        # The spec table gave no DCR for this part: leave it out, don't guess.
+        description = f"INDUCTOR {construction} {value} {tolerance} {eia}".upper()
 
     tmin = csv_row.get("operating_temp_min_c", "").strip()
     tmax = csv_row.get("operating_temp_max_c", "").strip()
@@ -517,25 +422,14 @@ def row_for_part(
         flavour = subseries.split("_", 1)[1] if "_" in subseries else ""
         qual = "AEC-Q200" if any(c in flavour for c in "ZH") else ""
 
-    row = [
-        mpn,                          # Comment
-        description,                  # Description
-        MFG,                          # MFG
-        mpn,                          # MPN
-        eia,                          # Package
-        inductance_str,               # Inductance
-        tolerance,                    # Tolerance
-        f"{dcr}\u03A9" if dcr else "",  # DCR (ohm symbol)
-        f"{current_ma}mA" if current_ma else "",  # Current
-        f"{srf}MHz" if srf else "",   # SRF
-        q,                            # Q
-        tr,                           # Tr
-        qual,                         # Qual
-        SCHLIB, "INDUCTOR",           # Library Path / Ref
-    ] + fp_cells
+    record = dict(zip(_standard.COMMON, [
+        mpn, description, MFG, mpn, eia, SCHLIB, "INDUCTOR", *fp_cells, qual,
+    ], strict=True))
+    record.update({"Value": value, "Tolerance": tolerance, "DCR": dcr,
+                   "Current": current, "Tr": tr, "SRF": srf, "Q": params["q"]})
 
     sheet_name = f"{family_id.split('-')[1].upper()}{eia}"
-    return row, fp_root, sheet_name
+    return record, fp_root, sheet_name
 
 
 def _format_height_code(h_mm: float) -> str:

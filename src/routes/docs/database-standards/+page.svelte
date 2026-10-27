@@ -170,10 +170,11 @@
 		sortable and consistent across manufacturers, whichever family a part comes from.
 	</p>
 	<p>
-		<strong class="text-ink-900">Vishay CRCW</strong> follows this standard. The build rejects a row from
-		a conforming family if its description is not all caps, ends with a period, or any field contains
-		a non-ASCII character. Families added before the standard may still differ in places, such as mixed-case
-		manufacturer names. Use the workbook viewer on the Generate tab to check columns before you download.
+		Every family's workbook follows this standard. The build rejects any row whose description is
+		not all caps, ends with a period or starts with the wrong component prefix, whose value,
+		tolerance, voltage, Tcr, temperature range, DCR or current is malformed, or that contains a
+		non-ASCII character in any field. Use the workbook viewer on the Generate tab to check columns
+		before you download.
 	</p>
 
 	<h2 class="pt-4 text-xl font-semibold text-ink-900">General rules</h2>
@@ -206,8 +207,11 @@
 
 	<h2 class="pt-4 text-xl font-semibold text-ink-900">Database fields</h2>
 	<p>
-		Every workbook lists the common fields first, then the fields for its component type, and no
-		other columns.
+		Every workbook lists the common fields first, then the fields for its component type. By default
+		it contains no other columns. Some families can add extra, non-standard columns, such as Power,
+		Datasheet, alternate MPNs, SRF or Q: tick them under <em>Extra / non-standard parameters</em> on the
+		family's card in the Libraries tab. Extra columns follow the standard ones and obey the same general
+		rules.
 	</p>
 	<h3 class="pt-2 text-base font-semibold text-ink-900">Common fields (all types)</h3>
 	{@render fieldTable(commonFields, 'Column', 'Content')}

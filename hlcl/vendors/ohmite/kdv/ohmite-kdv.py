@@ -15,10 +15,10 @@ offered (``•`` glyph in the PDF).
 
 Output (in build/):
 
-* ohmite-kdv.xls -- Excel 97-2003 workbook matching the per-row schema
-  documented in the top-level README.md ("Database Standards"). One
-  worksheet named ``KDV``. ``Comment``, ``MFG``, ``MPN`` columns hold
-  the orderable Ohmite part number; ``Library Path`` / ``Footprint
+* ohmite-kdv.xls -- Excel 97-2003 workbook following the database
+  standard in ``vendors/_standard.py`` (resistor columns, plus the
+  Power / MFG 2..MPN 5 extras when enabled). One worksheet named
+  ``KDV``. ``Comment`` and ``MPN`` hold the orderable Ohmite part number; ``Library Path`` / ``Footprint
   Path`` columns reference the shared house.SchLib + house.PcbLib.
 * footprints/ohmite-kdv-footprints.json -- per-vendor footprints
   sidecar consumed by house/build_house_footprints.py and
@@ -73,7 +73,8 @@ import argparse
 import os
 import sys
 from collections import Counter
-from typing import Iterable, List, Tuple
+from decimal import Decimal
+from typing import Dict, Iterable, List, Tuple
 
 import xlwt
 
@@ -97,6 +98,7 @@ if _VENDORS_DIR not in sys.path:
     sys.path.insert(0, _VENDORS_DIR)
 import _common as _vendor_common
 import _dblib as _vendor_dblib
+import _standard
 
 VENDOR_KEY = "ohmite-kdv"
 FAMILY_ID = VENDOR_KEY  # catalog id matches on-disk vendor key
@@ -185,16 +187,9 @@ def part_number(size: str, tolerance: str, milliohm: int) -> str:
 
 
 def resistance_label(milliohm: int) -> str:
-    """Human-readable resistance string for the ``Value`` column.
-    Sub-Ω parts use 'mΩ' (e.g. '50mΩ', '820mΩ'); 1 Ω+ would use 'Ω' but
-    the standard table only lists sub-Ω parts so the second branch is
-    just defensive."""
-    if milliohm >= 1000:
-        ohms = milliohm / 1000.0
-        if ohms == int(ohms):
-            return f"{int(ohms)}\u03a9"
-        return f"{ohms:g}\u03a9"
-    return f"{milliohm}m\u03a9"
+    """Standard ``Value`` field: plain ohms below 1 kOhm, so the
+    sub-ohm parts read '0.05' ... '0.82' (no 'm' prefix, no unit)."""
+    return _standard.ohms(Decimal(milliohm) / 1000)
 
 
 def tcr_for(milliohm: int) -> str:
@@ -203,43 +198,39 @@ def tcr_for(milliohm: int) -> str:
     The 100 mΩ boundary is included in the tighter spec (metal film
     resistors are linear well below 100 mΩ; the looser TCR is purely
     a fab-yield concession at the bottom of the range)."""
-    return "+/-100 ppm" if milliohm < 100 else "+/-50 ppm"
+    return "+/-100" if milliohm < 100 else "+/-50"
 
 
 def power_for(size: str) -> str:
-    """Rated power at 70°C ambient, per the spec block."""
+    """Rated power at 70°C ambient, per the spec block (1/10 W ... 1/2 W),
+    in SI watts for the optional Power column."""
     return {
-        "02": "1/10W",
-        "04": "1/8W",
-        "06": "1/5W",
-        "08": "1/4W",
-        "12": "1/2W",
+        "02": "0.1W",
+        "04": "0.125W",
+        "06": "0.2W",
+        "08": "0.25W",
+        "12": "0.5W",
     }[size]
 
 
-# --- Workbook column schema --------------------------------------------
+# --- Workbook rows ------------------------------------------------------
 
-# Same column layout as every other vendor's .xls -- documented in
-# README.md "Database Standards". KDV ships as a single packaging
-# variant (ET = embossed tape & reel) so MFG 2/MPN 2 .. MFG 5/MPN 5 are
-# left blank for forward compatibility with the Murata-style
-# multi-pack scheme. Slot numbering starts at 2 (the unsuffixed
-# MFG/MPN above is slot 1, by convention).
-HEADERS = [
-    "Comment", "Description", "MFG", "MPN",
-    "MFG 2", "MPN 2", "MFG 3", "MPN 3",
-    "MFG 4", "MPN 4", "MFG 5", "MPN 5",
-    "Package", "Value",
-    "Tolerance", "Tcr", "Tr", "Qual", "Voltage", "Power",
-    "Library Path", "Library Ref",
+# Rows follow the database standard (vendors/_standard.py); write_sheet
+# appends only the extras the user enabled. KDV ships as a single
+# packaging variant (ET = embossed tape & reel) so the MFG 2/MPN 2 ..
+# MFG 5/MPN 5 alternates are blank.
+SHEET = "KDV"
+CONSTRUCTION = "METAL FILM"
+SUPPORTED_EXTRAS = ("power", "alternates")
+FOOTPRINT_COLUMNS = [
     "Footprint Path", "Footprint Ref",
     "Footprint Path 2", "Footprint Ref 2",
     "Footprint Path 3", "Footprint Ref 3",
 ]
 
 
-def build_row(size: str, tolerance: str, milliohm: int) -> List[str]:
-    """Return one .xls row matching ``HEADERS``."""
+def build_row(size: str, tolerance: str, milliohm: int) -> Dict[str, str]:
+    """Return one database-standard row dict keyed by column name."""
     if size not in KDV_BODIES:
         raise ValueError(f"unknown KDV size code {size!r}")
     L, W, H, T, eia, fp_root = KDV_BODIES[size]
@@ -247,35 +238,30 @@ def build_row(size: str, tolerance: str, milliohm: int) -> List[str]:
     mpn = part_number(size, tolerance, milliohm)
     value_str = resistance_label(milliohm)
     tol_str = TOLERANCE_PCT[tolerance]
-    tcr_str = tcr_for(milliohm)
-    pwr_str = power_for(size)
-
-    description = (
-        f"RESISTOR CURRENT-SENSE METAL-FILM "
-        f"{value_str} {tol_str} {pwr_str} {eia}"
-    )
-
     fp_cells = _vendor_common.xls_footprint_columns(PCBLIB, fp_root, FAMILY_ID)
 
-    return [
-        mpn,                          # Comment
-        description,                  # Description
-        "OHMITE",                     # MFG
-        mpn,                          # MPN
-        "", "", "", "", "", "", "", "",  # MFG 2/MPN 2 .. MFG 5/MPN 5 (no alternate pack)
-        eia,                          # Package
-        value_str,                    # Value
-        tol_str,                      # Tolerance
-        tcr_str,                      # Tcr
-        "-55:155",                    # Tr (operating temp range, page 1)
-        "",                           # Qual (commercial; AEC-Q200 not claimed by KDV)
-        "",                           # Voltage (n/a for current-sense resistors)
-        pwr_str,                      # Power
-        SCHLIB, "RES",                # Library Path / Ref
-    ] + fp_cells
+    return {
+        "Comment": mpn,
+        "Description": _standard.resistor_description(CONSTRUCTION, value_str, tol_str, eia),
+        "MFG": "OHMITE",
+        "MPN": mpn,
+        "Package": eia,
+        "Library Path": SCHLIB,
+        "Library Ref": "RES",
+        **dict(zip(FOOTPRINT_COLUMNS, fp_cells)),
+        "Qual": "",                   # commercial; AEC-Q200 not claimed by KDV
+        "Value": value_str,
+        "Tolerance": tol_str,
+        "Voltage": "",                # n/a for current-sense resistors
+        "Tcr": tcr_for(milliohm),
+        "Tr": "-55:155",              # operating temp range, page 1
+        "Power": power_for(size),
+        # No alternate packaging: MFG 2/MPN 2 .. MFG 5/MPN 5 stay blank.
+        **{column: "" for column in _standard.EXTRAS["alternates"]},
+    }
 
 
-def all_rows(enabled_sizes: frozenset) -> Iterable[List[str]]:
+def all_rows(enabled_sizes: frozenset) -> Iterable[Dict[str, str]]:
     """Iterate every offered (size, tolerance, value) cell whose
     package size is enabled in the active BuildConfig."""
     for size, tolerance, values in OFFERINGS:
@@ -345,28 +331,23 @@ def main() -> int:
 
     enabled_sizes = _vendor_common.enabled_sizes(FAMILY_ID)
 
+    rows = list(all_rows(enabled_sizes))
     wb = xlwt.Workbook()
-    sheet = wb.add_sheet("KDV")
-    for col, h in enumerate(HEADERS):
-        sheet.write(0, col, h)
+    row_idx = _standard.write_sheet(wb.add_sheet(SHEET), "R", FAMILY_ID, rows,
+                                    SUPPORTED_EXTRAS)
 
     by_size = Counter()
     by_eia = Counter()
-    row_idx = 0
-    for row in all_rows(enabled_sizes):
-        row_idx += 1
-        for col, cell in enumerate(row):
-            sheet.write(row_idx, col, cell)
+    for row in rows:
         # Recover size / EIA from the MPN for the diagnostic summary.
-        mpn = row[0]
-        size = mpn[3:5]
+        size = row["MPN"][3:5]
         by_size[size] += 1
         by_eia[KDV_BODIES[size][4]] += 1
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(FOOTPRINTS_DIR, exist_ok=True)
     wb.save(args.output)
-    _vendor_dblib.write_dblib(DEFAULT_DBLIB_OUTPUT, vendor_key=VENDOR_KEY, tables=["KDV"])
+    _vendor_dblib.write_dblib(DEFAULT_DBLIB_OUTPUT, vendor_key=VENDOR_KEY, tables=[SHEET])
     fp_count = write_footprints_json(args.footprints_output, enabled_sizes)
 
     densities = _vendor_common.density_codes(FAMILY_ID)

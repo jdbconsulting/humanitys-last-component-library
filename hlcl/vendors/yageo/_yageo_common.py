@@ -13,8 +13,9 @@ footprints-JSON output contract:
 
 This module hosts the bits every Yageo family script needs:
 
-* :data:`HEADERS` -- canonical .xls column order (matches the schema
-  documented in the top-level README's "Database Standards" section).
+* :data:`SUPPORTED_EXTRAS` -- the optional (non-standard) column groups
+  the Yageo rows can supply; the column order and field rules live in
+  :mod:`vendors._standard`.
 * :data:`RESC_BODIES` -- the unique RESC body geometries the three
   families reference, keyed by IPC-7351B footprint root. Each family
   script passes the subset of root keys its parts actually use to
@@ -26,11 +27,10 @@ This module hosts the bits every Yageo family script needs:
   here because Yageo's published RC, AC, and RT body heights for
   each chip size match within rounding (the X<height> code is
   identical), so a single mapping covers all three.
-* :func:`format_resistance` -- convert an ohm value to the SI-suffixed
-  string used in the Value / Description columns.
 * :func:`row_for_part` -- a single-row builder that takes one parsed
-  CSV row plus the family-specific qualification string and returns
-  the .xls row matching :data:`HEADERS`.
+  CSV row plus the family-specific qualification and construction
+  strings and returns the database-standard record (a dict keyed by
+  column name) for :func:`vendors._standard.write_sheet`.
 * :func:`build_footprint_rows` -- wraps the
   :func:`vendors._common.expand_footprint_rows` density-fanout so each
   family script just hands in its set of footprint roots.
@@ -63,7 +63,8 @@ the scraper consumed:
     tcr               <- "Temperature Coefficient (Resistors)"
                          (e.g. ``"-/+200 ppm/C"``); normalised below
                          to the ``+/-200`` form the rest of the
-                         library uses.
+                         library uses (no ``ppm`` unit, per the
+                         database standard).
     power_w           <- "Compare Power" (numeric, in watts)
     voltage_v         <- "Compare Voltage DC" (numeric, in volts)
     temp_min_c        <- "Compare Temperature Minimum" (numeric)
@@ -96,29 +97,20 @@ if _VENDORS_DIR not in sys.path:
     sys.path.insert(0, _VENDORS_DIR)
 
 import _common  # noqa: E402  -- vendors/_common.py
+import _standard  # noqa: E402  -- vendors/_standard.py (after _common: needs _config)
 
 
 # --- .xls column schema --------------------------------------------------
-# Same shape every Yageo-family workbook uses; matches the per-row schema
-# documented in README.md ("Database Standards" section). The three
-# Footprint Path / Ref pairs hold IPC-7351B density variants
-# (Nominal / Least / Most) for the same physical part. Yageo doesn't
-# ship multi-suffix packaging alternates the way Murata/Samsung do
-# (the trailing "L" is a *fixed* default code, not a packaging
-# selector), so the (MFG 2, MPN 2) .. (MFG 5, MPN 5) columns are
-# omitted entirely -- same approach Panasonic ERJ/ERA workbooks
-# take. Altium auto-discovers any extra .xls columns as parameters,
-# so the per-row schema documented in README.md is "at least
-# these columns, in this order"; absent optional columns are fine.
-HEADERS = [
-    "Comment", "Description", "MFG", "MPN",
-    "Package", "Value",
-    "Tolerance", "Tcr", "Tr", "Qual", "Voltage", "Power",
-    "Library Path", "Library Ref",
-    "Footprint Path", "Footprint Ref",
-    "Footprint Path 2", "Footprint Ref 2",
-    "Footprint Path 3", "Footprint Ref 3",
-]
+# Rows follow the shared database standard (vendors/_standard.py): every
+# standard resistor column, plus the extra columns below, which only reach
+# the workbook when the family enables them (``extra_parameters`` option).
+# The three Footprint Path / Ref pairs hold IPC-7351B density variants
+# (Nominal / Least / Most) for the same physical part. Yageo doesn't ship
+# multi-suffix packaging alternates the way Murata/Samsung do (the
+# trailing "L" is a *fixed* default code, not a packaging selector), so
+# there are no alternates columns.
+KIND = "R"
+SUPPORTED_EXTRAS = ("power",)
 
 SCHLIB = r"house.SchLib"
 PCBLIB = r"house.PcbLib"
@@ -158,17 +150,10 @@ SIZE_TO_FOOTPRINT: Mapping[str, tuple] = {
 
 # --- Resistance / TCR formatting -----------------------------------------
 
-def format_resistance(value: float) -> str:
-    """Format a resistance in ohms as a SI-suffixed string used by the
-    rest of the library (e.g. ``'4.7k'``, ``'100'``, ``'1M'``). Mirrors
-    :func:`vendors.panasonic._panasonic_common.format_resistance`."""
-    if value < 1000:
-        return f"{value:g}"
-    if value < 1_000_000:
-        k = value / 1000
-        return f"{k:g}k"
-    m = value / 1_000_000
-    return f"{m:g}M"
+def format_resistance(value) -> str:
+    """Format a resistance in ohms (number or numeric string) as the
+    database-standard Value text (e.g. ``'4.7k'``, ``'100'``, ``'1M'``)."""
+    return _standard.ohms(value)
 
 
 _TCR_RE = re.compile(
@@ -180,12 +165,13 @@ _TCR_RE = re.compile(
 
 
 def normalize_tcr(raw: str) -> str:
-    """Convert Yageo's TCR strings to the library's compact ASCII form.
+    """Convert Yageo's TCR strings to the database-standard Tcr form
+    (ppm/C implied, so no unit).
 
     Examples (input -> output):
-        ``"-/+200 ppm/C"``        -> ``"+/-200 ppm"``
-        ``"-200/+600 ppm/C"``     -> ``"-200/+600 ppm"``
-        ``"+/-25 ppm/C"``         -> ``"+/-25 ppm"``
+        ``"-/+200 ppm/C"``        -> ``"+/-200"``
+        ``"-200/+600 ppm/C"``     -> ``"-200/+600"``
+        ``"+/-25 ppm/C"``         -> ``"+/-25"``
         ``""``                    -> ``""``
         anything else / unknown   -> the raw string with the trailing
                                      ``"/C"`` stripped, in case Yageo
@@ -204,14 +190,26 @@ def normalize_tcr(raw: str) -> str:
     b = m.group("b")
     sym = (m.group("sym") or "").replace("-/+", "+/-")
     if b is None:
-        return f"+/-{a} ppm" if sym in ("+/-", "") else f"{sym}{a} ppm"
+        return f"+/-{a}" if sym in ("+/-", "") else f"{sym}{a}"
     sym2 = m.group("sym2") or "+"
-    return f"-{a}/{sym2}{b} ppm"
+    return f"-{a}/{sym2}{b}"
+
+
+_PERCENT_RE = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*%\s*$")
+
+
+def format_tolerance(raw: str) -> str:
+    """``"1%"`` -> ``'1%'``; ``"0.50%"`` -> ``'0.5%'`` (plain decimal,
+    no trailing zeros). Anything that isn't a percentage passes through
+    stripped, so :func:`vendors._standard.write_sheet` rejects it loudly
+    instead of the importer guessing."""
+    m = _PERCENT_RE.match(raw or "")
+    return _standard.number(m.group(1)) + "%" if m else (raw or "").strip()
 
 
 def format_power_w(p_w: float) -> str:
     """Format a watt rating as the fractional or milliwatt string the
-    rest of the library prefers. Yageo publishes 30 mW, 50 mW, 62.5 mW,
+    rest of the library prefers (the optional ``Power`` column). Yageo publishes 30 mW, 50 mW, 62.5 mW,
     100 mW, ..., 1 W ratings; the conventional fractions
     (``"1/32W"``, ``"1/16W"``, ...) would be ideal but Yageo's PIM
     doesn't expose them, so we emit the decimal form instead."""
@@ -223,12 +221,10 @@ def format_power_w(p_w: float) -> str:
     return f"{mw:g}mW"
 
 
-def format_voltage_v(v: float) -> str:
-    """``50.0`` -> ``'50V'``; ``200.0`` -> ``'200V'``; ``1000.0`` -> ``'1kV'``."""
-    if v >= 1000:
-        kv = v / 1000
-        return f"{int(kv)}kV" if kv == int(kv) else f"{kv:g}kV"
-    return f"{int(v)}V" if v == int(v) else f"{v:g}V"
+def format_voltage_v(v) -> str:
+    """``"50"`` -> ``'50V'``; ``200.0`` -> ``'200V'``; ``1000`` -> ``'1000V'``
+    (database-standard Voltage: plain volts, no SI prefix)."""
+    return _standard.number(v) + "V"
 
 
 def format_temp_range(tmin: float, tmax: float) -> str:
@@ -243,17 +239,17 @@ def row_for_part(
     *,
     family_id: str,
     qualifications: str,
-    description_kind: str,
+    construction: str,
 ) -> tuple | None:
-    """Return ``(row, fp_root, eia)`` for a CSV row, or ``None`` if the
+    """Return ``(record, fp_root, eia)`` for a CSV row, or ``None`` if the
     part should be dropped (size not in :data:`SIZE_TO_FOOTPRINT` or
     disabled by the active BuildConfig).
 
-    ``description_kind`` is the human-readable technology phrase
-    inserted into the Description column (e.g.
-    ``"THICK FILM"`` for RC/AC, ``"THIN FILM"`` for RT) so the row
-    text matches the Panasonic ERJ / ERA convention used elsewhere
-    in the catalog.
+    ``record`` is a dict holding every database-standard resistor column
+    plus the :data:`SUPPORTED_EXTRAS` columns, ready for
+    :func:`vendors._standard.write_sheet`. ``construction`` is the film
+    type for the Description (``"THICK FILM"`` for RC/AC, ``"THIN FILM"``
+    for RT); 0-ohm parts become ``RESISTOR JUMPER 0 OHM <package>``.
     """
     size_code = csv_row["size_code"]
     if size_code == "1210" and family_id != "yageo-ac":
@@ -266,42 +262,46 @@ def row_for_part(
         return None
 
     mpn = csv_row["mpn"]
-    ohms = float(csv_row["resistance_ohms"])
-    tol = csv_row["tolerance"].strip()
+    # Decimal-exact from the CSV text (no float round trip).
+    value = format_resistance(csv_row["resistance_ohms"].strip())
+    tol = format_tolerance(csv_row["tolerance"])
     tcr = normalize_tcr(csv_row["tcr"])
     power = format_power_w(float(csv_row["power_w"])) if csv_row.get("power_w") else ""
-    volts = (
-        format_voltage_v(float(csv_row["voltage_v"]))
-        if csv_row.get("voltage_v") else ""
-    )
+    volts = format_voltage_v(csv_row["voltage_v"].strip()) if csv_row.get("voltage_v") else ""
     tr = (
         format_temp_range(float(csv_row["temp_min_c"]), float(csv_row["temp_max_c"]))
         if csv_row.get("temp_min_c") and csv_row.get("temp_max_c") else ""
     )
+    package = eia.upper()
 
-    value = format_resistance(ohms)
-    description = (
-        f"RESISTOR {description_kind} {value} OHM {tol} {eia}"
-    ).strip()
+    fp_path, fp_ref, fp_path2, fp_ref2, fp_path3, fp_ref3 = (
+        _common.xls_footprint_columns(PCBLIB, fp_root, family_id)
+    )
 
-    fp_cells = _common.xls_footprint_columns(PCBLIB, fp_root, family_id)
-
-    row = [
-        mpn,                          # Comment
-        description,                  # Description
-        "YAGEO",                      # MFG
-        mpn,                          # MPN
-        eia,                          # Package
-        value,                        # Value
-        tol,                          # Tolerance
-        tcr,                          # Tcr
-        tr,                           # Tr
-        qualifications,               # Qual
-        volts,                        # Voltage
-        power,                        # Power
-        SCHLIB, "RES",                # Library Path / Ref
-    ] + fp_cells
-    return row, fp_root, eia
+    record = {
+        "Comment": mpn,
+        "Description": _standard.resistor_description(construction, value, tol, package),
+        "MFG": "YAGEO",
+        "MPN": mpn,
+        "Package": package,
+        "Library Path": SCHLIB,
+        "Library Ref": "RES",
+        "Footprint Path": fp_path,
+        "Footprint Ref": fp_ref,
+        "Footprint Path 2": fp_path2,
+        "Footprint Ref 2": fp_ref2,
+        "Footprint Path 3": fp_path3,
+        "Footprint Ref 3": fp_ref3,
+        "Qual": qualifications,
+        "Value": value,
+        "Tolerance": tol,
+        "Voltage": volts,
+        "Tcr": tcr,
+        "Tr": tr,
+        # Extra (non-standard) column; emitted only when enabled.
+        "Power": power,
+    }
+    return record, fp_root, eia
 
 
 # --- Per-vendor footprints JSON helper ------------------------------------

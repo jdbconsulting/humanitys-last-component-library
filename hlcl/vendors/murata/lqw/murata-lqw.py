@@ -18,7 +18,8 @@ Inputs:
 Outputs:
 
 * ``build/output/murata-lqw.xls`` -- one sheet per EIA we ship
-  (LQW0201 / LQW0402 / LQW0603 / LQW0805 / LQW1210), 21 columns each.
+  (LQW0201 / LQW0402 / LQW0603 / LQW0805 / LQW1210), in the
+  database-standard inductor layout (``_standard``).
 * ``build/output/murata-lqw.DbLib`` -- companion DbLib.
 * ``build/intermediate/footprints/murata-lqw-footprints.json``.
 
@@ -60,6 +61,7 @@ if _VENDORS_DIR not in sys.path:
     sys.path.insert(0, _VENDORS_DIR)
 import _common  # noqa: E402
 import _dblib  # noqa: E402
+import _standard  # noqa: E402
 
 _MURATA_DIR = os.path.normpath(os.path.join(HERE, ".."))
 if _MURATA_DIR not in sys.path:
@@ -87,7 +89,7 @@ def main() -> int:
         )
         return 1
 
-    rows_by_sheet: dict[str, list[list]] = {}
+    rows_by_sheet: dict[str, list[dict]] = {}
     fp_roots_with_base: list[tuple[str, str]] = []
     pkg_counts: Counter = Counter()
     fp_root_counts: Counter = Counter()
@@ -126,13 +128,10 @@ def main() -> int:
         )
 
     wb = xlwt.Workbook()
-    sheets = {name: wb.add_sheet(name) for name in sheet_order}
     for name in sheet_order:
-        for col, h in enumerate(_lq.HEADERS):
-            sheets[name].write(0, col, h)
-        for r_idx, row in enumerate(sorted(rows_by_sheet[name], key=lambda r: r[0]), start=1):
-            for col, cell in enumerate(row):
-                sheets[name].write(r_idx, col, cell)
+        _standard.write_sheet(wb.add_sheet(name), _lq.KIND, FAMILY_ID,
+                              sorted(rows_by_sheet[name], key=lambda r: r["MPN"]),
+                              _lq.SUPPORTED_EXTRAS)
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(FOOTPRINTS_DIR, exist_ok=True)

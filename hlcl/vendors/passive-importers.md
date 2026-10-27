@@ -69,13 +69,14 @@ CRCW 0201 comes from a separate commercial datasheet without AEC-Q200, so its
 lowest TCR offered for each value: `FK` for 47 ohm–1 Mohm, `FN`/`JN` for
 10 ohm–10 Mohm otherwise, and `FX`/`JX` (-200/+400 ppm) below 10 ohm.
 
-CRCW workbooks follow the website's database standard (`/docs/database-standards/`).
-`csv_main(..., standard=True)` writes only the standard columns, in order. Power,
-features, rating conditions and the datasheet link are not emitted; the decoder
-and the notes above record them. Descriptions read
-`RESISTOR THICK FILM 4.7K OHM 5% 0603`, or `RESISTOR JUMPER 0 OHM 0402` for jumpers.
-A non-ASCII field, a description that is not all caps, or one ending in a period
-fails the build. Other datasheet-backed families still use the legacy layout.
+Every workbook follows the website's database standard (`/docs/database-standards/`),
+written through `vendors/_standard.py`: standard columns first, in order, then any
+extra columns the family enabled. These importers can add Power (resistors),
+Features, Rating Conditions and Datasheet, chosen per family under the Libraries
+tab's `extra_parameters` option (none by default). Descriptions read
+`RESISTOR THICK FILM 4.7K OHM 5% 0603` or `CAPACITOR CERAMIC 10NF 10% 100V X7R 0402`,
+and jumpers `RESISTOR JUMPER 0 OHM 0402`. A row with a non-ASCII field or a malformed
+description or parameter fails the build.
 
 RCS uses ambient **P70**, not the higher terminal-temperature rating. MC AT uses
 the **general operating mode** at P70 and a 125 C film limit; higher-power modes

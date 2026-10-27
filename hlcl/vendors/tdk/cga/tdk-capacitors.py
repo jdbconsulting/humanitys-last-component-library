@@ -1,8 +1,13 @@
 #!/usr/bin/env python
+"""Generate build/output/tdk-capacitors.xls (TDK CGA automotive MLCCs) from
+tdk_automotive_pn.csv: database-standard capacitor rows (vendors/_standard.py)
+decoded from each full ordering code, plus the .DbLib and footprints JSON.
+"""
 
 import os
 import sys
-import xlwt
+from decimal import Decimal
+
 from xlwt import Workbook
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -25,6 +30,7 @@ if _VENDORS_DIR not in sys.path:
     sys.path.insert(0, _VENDORS_DIR)
 import _common as _vendor_common
 import _dblib as _vendor_dblib
+import _standard
 
 # Written to the drawingNote field of every row in the per-vendor
 # footprints JSON so a downstream reviewer can see which datasheet the
@@ -32,31 +38,14 @@ import _dblib as _vendor_dblib
 DRAWING_NOTE = "Dimensions from TDK CGA automotive series datasheet"
 VENDOR_KEY = "tdk-capacitors"
 FAMILY_ID = VENDOR_KEY  # catalog id matches on-disk vendor key
+# Each CSV row is one full orderable code, so there are no packaging
+# alternates or other extra columns to offer.
+SUPPORTED_EXTRAS = ()
 
 # Resolve the active BuildConfig once at module load time -- every row
 # in the CSV consults `enabled_sizes` to decide whether to emit, and
 # `density_codes` to drive .xls / footprints-JSON column generation.
 ENABLED_SIZES = _vendor_common.enabled_sizes(FAMILY_ID)
-
-
-def format_capacitance(capacitance):
-    """
-    Format the capacitance value.
-
-    Parameters:
-    capacitance (float): Capacitance in picofarads
-
-    Returns:
-    str: Formatted capacitance string
-    """
-    if capacitance < 1000:  # less than 1nF
-        return str(capacitance).rstrip('0').rstrip('.') + 'pF'
-    elif capacitance < 1e6:  # less than 1uF
-        capacitance /= 1000  # convert to nF
-        return str(capacitance).rstrip('0').rstrip('.') + 'nF'
-    else:
-        capacitance /= 1e6  # convert to uF
-        return str(capacitance).rstrip('0').rstrip('.') + 'uF'
 
 
 # CGA part-number decode tables (from TDK CGA automotive datasheet)
@@ -87,18 +76,16 @@ voltage_test_condition = {'1': '1', '2': '2', '3': '3'}
 temperature_range = {'C0G': '-55:125', 'X5R': '-55:85', 'X7R': '-55:125', 'X7S': '-55:125', 'X7T': '-55:125'}
 temperature_coefficient = {'C0G': '+/-30', 'X5R': '+/-15%', 'X7R': '+/-15%', 'X7S': '+/-22%', 'X7T': '+22%/-33%'}
 rated_voltage = {'0E': '2.5V', '0G': '4V', '0J': '6.3V', '1A': '10V', '1C': '16V', '1E': '25V', '1V': '35V', '1H': '50V', '1N': '75V'}
-tolerance = {'C': '+/-0.25pF', 'D': '+/-0.50pF', 'J': '5%', 'K': '10%', 'M': '20%'}
+tolerance = {'C': '+/-0.25pF', 'D': '+/-0.5pF', 'J': '5%', 'K': '10%', 'M': '20%'}
 packaging_style = {'A': 'A', 'B': 'B', 'K': 'K'}
 reserved = {'A': 'A', 'B': 'B', 'C': 'C'}
 
 
-headers = ["Comment", "Description", "MFG", "MPN", "Package", "Value", "Tolerance", "Tcr", "Tr", "Qual", "Voltage", "Library Path", "Library Ref", "Footprint Path", "Footprint Ref", "Footprint Path 2", "Footprint Ref 2", "Footprint Path 3", "Footprint Ref 3"]
-
-
 def decode_cga_part(part_number):
-    """Decode a TDK CGA part number into a database row, or
-    ``(None, reason, None)`` if the row's package size has been
-    disabled in the active BuildConfig."""
+    """Decode a TDK CGA part number into a database-standard record (a
+    dict keyed by column name), returned as ``(record, fp_root,
+    body_key)``, or ``(None, reason, None)`` if the row's package size
+    has been disabled in the active BuildConfig."""
     metric = dimensionsmetric[part_number[3]]
     dim = dimensionseia[part_number[3]]
     if dim not in ENABLED_SIZES:
@@ -112,62 +99,27 @@ def decode_cga_part(part_number):
 
     capcode = part_number[11:14]
     if 'R' in capcode:
-        cap = float(capcode.replace('R', '.'))
+        cap = Decimal(capcode.replace('R', '.'))
     else:
-        cap = float(capcode[0:2]) * (10 ** int(capcode[2]))
+        cap = Decimal(capcode[0:2]) * 10 ** int(capcode[2])
 
     tol = tolerance[part_number[14]]
 
-    value = format_capacitance(cap)
-    description = "CAPACITOR CERAMIC " + value.upper() + " " + tol + " " + rv + " " + dielectric + " " + dim
+    value = _standard.capacitance(cap)
+    fp_cells = _vendor_common.xls_footprint_columns(r"house.PcbLib", package, FAMILY_ID)
 
-    schem_lib = r"house.SchLib"
-    fp_lib = r"house.PcbLib"
-    fp_cells = _vendor_common.xls_footprint_columns(fp_lib, package, FAMILY_ID)
-
-    row = [part_number, description, "TDK", part_number, dim, value, tol, tcr, tr, "AEC-Q200", rv, schem_lib, "CAP"]
-    row += fp_cells
-    return row, package, (metric, thick_letter)
-
-
-cga_table = [headers]
-unique_bodies = set()  # (metric, thick_letter) pairs needing footprints
-config_skipped = 0
-
-with open(PN_CSV, 'r') as f:
-    for line in f:
-        part_number = line.strip()
-        if not part_number:
-            continue
-        row, _info, body_key = decode_cga_part(part_number)
-        if row is None:
-            config_skipped += 1
-            continue
-        cga_table.append(row)
-        unique_bodies.add(body_key)
-
-if config_skipped:
-    print(f"({config_skipped} CGA parts dropped because the active "
-          f"BuildConfig disabled their package size.)", file=sys.stderr)
-
-
-def write_sheet(workbook, name, table):
-    sheet = workbook.add_sheet(name)
-    for x, line in enumerate(table):
-        for y, data in enumerate(line):
-            sheet.write(x, y, data)
-
-
-wb = Workbook()
-write_sheet(wb, 'CGA', cga_table)
-
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-wb.save(os.path.join(OUTPUT_DIR, "tdk-capacitors.xls"))
-_vendor_dblib.write_dblib(
-    path=os.path.join(OUTPUT_DIR, "tdk-capacitors.DbLib"),
-    vendor_key="tdk-capacitors",
-    tables=["CGA"],
-)
+    record = {
+        **dict(zip(_standard.COMMON, [
+            part_number,                                                   # Comment
+            _standard.capacitor_description(value, tol, rv, dielectric, dim),
+            "TDK", part_number, dim,                                       # MFG / MPN / Package
+            r"house.SchLib", "CAP",                                        # Library Path / Ref
+            *fp_cells,
+            "AEC-Q200",                                                    # Qual (CGA = automotive)
+        ])),
+        "Value": value, "Tolerance": tol, "Voltage": rv, "Tcr": tcr, "Tr": tr,
+    }
+    return record, package, (metric, thick_letter)
 
 
 # --- Per-vendor footprint JSON output ------------------------------------
@@ -196,9 +148,47 @@ def _build_footprint_rows(bodies):
     return _vendor_common.expand_footprint_rows(body_specs, FAMILY_ID)
 
 
-os.makedirs(FOOTPRINTS_DIR, exist_ok=True)
-_vendor_common.write_footprints_json(
-    os.path.join(FOOTPRINTS_DIR, VENDOR_KEY + "-footprints.json"),
-    vendor=VENDOR_KEY,
-    footprints=_build_footprint_rows(unique_bodies),
-)
+def main():
+    records = []
+    unique_bodies = set()  # (metric, thick_letter) pairs needing footprints
+    config_skipped = 0
+
+    with open(PN_CSV, 'r') as f:
+        for line in f:
+            part_number = line.strip()
+            if not part_number:
+                continue
+            record, _info, body_key = decode_cga_part(part_number)
+            if record is None:
+                config_skipped += 1
+                continue
+            records.append(record)
+            unique_bodies.add(body_key)
+
+    if config_skipped:
+        print(f"({config_skipped} CGA parts dropped because the active "
+              f"BuildConfig disabled their package size.)", file=sys.stderr)
+
+    wb = Workbook()
+    _standard.write_sheet(wb.add_sheet('CGA'), 'C', FAMILY_ID, records,
+                          supported=SUPPORTED_EXTRAS)
+
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    wb.save(os.path.join(OUTPUT_DIR, "tdk-capacitors.xls"))
+    _vendor_dblib.write_dblib(
+        path=os.path.join(OUTPUT_DIR, "tdk-capacitors.DbLib"),
+        vendor_key="tdk-capacitors",
+        tables=["CGA"],
+    )
+
+    os.makedirs(FOOTPRINTS_DIR, exist_ok=True)
+    _vendor_common.write_footprints_json(
+        os.path.join(FOOTPRINTS_DIR, VENDOR_KEY + "-footprints.json"),
+        vendor=VENDOR_KEY,
+        footprints=_build_footprint_rows(unique_bodies),
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

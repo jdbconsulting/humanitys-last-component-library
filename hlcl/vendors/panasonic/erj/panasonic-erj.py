@@ -72,30 +72,31 @@ FOOTPRINT_ROOTS = [
 ]
 
 
-def build_table():
-    table = [pc.HEADERS]
+def build_records():
+    """Database-standard row dicts (see vendors/_standard.py) in workbook order."""
+    table = []
 
     # ERJ-XGNF (01005)
     # NOTE: there are multiple suffix options for packaging (Y and U)
     # but it appears only Y is commonly used.
     table += pc.make_res_range("Panasonic", "ERJ-XGNF", "Y",
-        pc.e24_e96_combined_10_97R6, "1/32W", "15V",
+        pc.e24_e96_combined_10_97R6, "0.031W", "15V",
         "1%", "+/-300", "-55:125", "", "01005", "RES", pc.SCHLIB,
         "RESC0402X13", VENDOR_KEY)
     table += pc.make_res_range("Panasonic", "ERJ-XGNF", "Y",
-        pc.e24_e96_combined_100_1M, "1/32W", "15V",
+        pc.e24_e96_combined_100_1M, "0.031W", "15V",
         "1%", "+/-200", "-55:125", "", "01005", "RES", pc.SCHLIB,
         "RESC0402X13", VENDOR_KEY)
 
     # ERJ-1GNF (0201)
     table += pc.make_res_range("Panasonic", "ERJ-1GNF", "C",
-        pc.e24_e96_combined_10_1M, "1/20W", "25V",
+        pc.e24_e96_combined_10_1M, "0.05W", "25V",
         "1%", "+/-200", "-55:125", "", "0201", "RES", pc.SCHLIB,
         "RESC0603X23", VENDOR_KEY)
 
     # ERJ-1GJF (0201) AUTOMOTIVE
     table += pc.make_res_range("Panasonic", "ERJ-1GJF", "C",
-        pc.e24_e96_combined_10_1M, "1/20W", "25V",
+        pc.e24_e96_combined_10_1M, "0.05W", "25V",
         "1%", "+/-200", "-55:155", "AEC-Q200 GRADE 1", "0201", "RES", pc.SCHLIB,
         "RESC0603X23", VENDOR_KEY)
 
@@ -106,19 +107,19 @@ def build_table():
 
     # ERJ-2RKF (0402)
     table += pc.make_res_range("Panasonic", "ERJ-2RKF", "X",
-        pc.e24_e96_combined_10_1M, "1/10W", "50V",
+        pc.e24_e96_combined_10_1M, "0.1W", "50V",
         "1%", "+/-100", "-55:155", "AEC-Q200 GRADE 0", "0402", "RES", pc.SCHLIB,
         "RESC1005X35", VENDOR_KEY)
 
     # ERJ-3EKF (0603)
     table += pc.make_res_range("Panasonic", "ERJ-3EKF", "V",
-        pc.e24_e96_combined_10_1M, "1/10W", "75V",
+        pc.e24_e96_combined_10_1M, "0.1W", "75V",
         "1%", "+/-100", "-55:155", "AEC-Q200 GRADE 0", "0603", "RES", pc.SCHLIB,
         "RESC1608X45", VENDOR_KEY)
 
     # ERJ-6ENF (0805)
     table += pc.make_res_range("Panasonic", "ERJ-6ENF", "V",
-        pc.e24_e96_combined_10_2M2, "1/8W", "150V",
+        pc.e24_e96_combined_10_2M2, "0.125W", "150V",
         "1%", "+/-100", "-55:155", "AEC-Q200 GRADE 0", "0805", "RES", pc.SCHLIB,
         "RESC2012X60", VENDOR_KEY)
 
@@ -149,13 +150,14 @@ def build_table():
     return table
 
 
+def build_table():
+    """Header row plus standard-column rows (used by the tests)."""
+    return pc.as_table(build_records())
+
+
 def main():
-    table = build_table()
     wb = xlwt.Workbook()
-    sheet = wb.add_sheet(SHEET)
-    for x, line in enumerate(table):
-        for y, data in enumerate(line):
-            sheet.write(x, y, data)
+    pc.write_sheet(wb.add_sheet(SHEET), VENDOR_KEY, build_records())
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(FOOTPRINTS_DIR, exist_ok=True)

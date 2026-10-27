@@ -13,12 +13,12 @@ CSV shape (one MPN per row, dumped by
 
 This module hosts the bits both Stackpole family scripts need:
 
-* :data:`HEADERS` -- canonical .xls column order, mirrors the schema
-  documented in README.md ("Database Standards" section). Stackpole
-  doesn't expose multi-suffix packaging alternates the way Murata and
-  Samsung do (the trailing letter on RMCF/RNCF MPNs is a fixed reel-
-  size code that's already part of the orderable MPN), so the
-  ``MFG 2``/``MPN 2`` .. ``MFG 5``/``MPN 5`` columns are omitted --
+* :data:`SUPPORTED_EXTRAS` -- the optional (non-standard) column groups
+  the Stackpole rows can supply; the column order and field rules live
+  in :mod:`vendors._standard`. Stackpole doesn't expose multi-suffix
+  packaging alternates the way Murata and Samsung do (the trailing
+  letter on RMCF/RNCF MPNs is a fixed reel-size code that's already
+  part of the orderable MPN), so there are no alternates columns --
   same convention Panasonic ERJ/ERA and Yageo RC/AC/RT take.
 * :data:`SIZE_TO_FOOTPRINT_THICK` / :data:`SIZE_TO_FOOTPRINT_THIN` --
   RMCF and RNCF respectively. Both are keyed by the 4-digit EIA size
@@ -29,25 +29,25 @@ This module hosts the bits both Stackpole family scripts need:
   0.55 mm matches the existing thick-film root anyway, so they end up
   on the same RESC root and let the house-priority merge resolve the
   body geometry).
-* :data:`format_resistance` -- ohms -> SI-suffixed string mirroring
-  the Panasonic/Yageo formatters.
+* :data:`format_resistance` -- ohms -> database-standard Value text
+  (``100``, ``4.7k``, ``1M``).
 * :func:`format_tolerance` -- normalize the tolerance text Stackpole
-  emits in the parametric search response (e.g. ``"1%"``, ``"0.05%"``).
-* :func:`normalize_tcr` -- ``"+/- 100 ppm"`` -> ``"+/-100 ppm"``;
-  passes through symmetric / asymmetric forms with the rest of the
-  library's compact spelling.
+  emits in the parametric search response (e.g. ``"1%"``, ``"0.05%"``);
+  jumper rows (``"< 0.05 ohm"``) have no percentage tolerance and
+  become blank.
+* :func:`normalize_tcr` -- ``"+/- 100 ppm"`` -> ``"+/-100"``;
+  passes through symmetric / asymmetric forms in the database
+  standard's compact, unit-less spelling.
 * :func:`row_for_part` -- single-row builder that takes one parsed
-  CSV row plus the family-specific qualification + description-kind
-  strings and returns the ``(row, fp_root, eia)`` tuple matching
-  :data:`HEADERS`.
+  CSV row plus the family-specific qualification + construction
+  strings and returns ``(record, fp_root, eia)``, where ``record`` is
+  the database-standard dict for :func:`vendors._standard.write_sheet`.
 * :func:`build_footprint_rows` -- wraps the
   :func:`vendors._common.expand_footprint_rows` density-fanout so each
   family script just hands in its set of footprint roots.
 
-The "Stackpole Electronics" MFG string is intentionally exact: it
-matches the manufacturer name Altium's Part Choices database query
-expects for SEI parts, so the per-vendor cross-references resolve
-without manual mfg-name remapping.
+The MFG string is the database standard's upper-case spelling of
+"Stackpole Electronics" (MFG cells are upper case across the library).
 
 CSV schema (one row per stocked Stackpole MPN, written by
 ``tools/scrape_stackpole.py``):
@@ -95,6 +95,7 @@ from __future__ import annotations
 import os
 import re
 import sys
+from decimal import Decimal, InvalidOperation
 from typing import Iterable, Mapping
 
 # Reach up two levels (stackpole/.. == vendors/) so `_common` is importable
@@ -105,33 +106,25 @@ if _VENDORS_DIR not in sys.path:
     sys.path.insert(0, _VENDORS_DIR)
 
 import _common  # noqa: E402  -- vendors/_common.py
+import _standard  # noqa: E402  -- vendors/_standard.py (after _common: needs _config)
 
 
 # --- Manufacturer name ----------------------------------------------------
-# Exact spelling Altium's Part Choices database query expects for
-# Stackpole parts -- "Stackpole Electronics" matches the entry the
-# upstream parametric DB ships, so cross-references resolve without
-# manual mfg-name remapping at place-time.
-MFG = "Stackpole Electronics"
+# Database standard: MFG cells are upper case.
+MFG = "STACKPOLE ELECTRONICS"
 
 
 # --- .xls column schema --------------------------------------------------
-# Same shape every Stackpole-family workbook uses. Three Footprint Path
-# / Ref pairs hold IPC-7351B density variants (Nominal / Least / Most)
-# of the same physical part. No (MFG 2, MPN 2) .. (MFG 5, MPN 5)
-# columns: Stackpole's RMCF/RNCF orderable MPNs already encode their
-# reel-size code in the trailing letter (no reel-format-only variants
-# beyond the orderable MPN), so the multi-MFG slots stay unused --
-# same approach Panasonic ERJ/ERA and Yageo RC/AC/RT take.
-HEADERS = [
-    "Comment", "Description", "MFG", "MPN",
-    "Package", "Value",
-    "Tolerance", "Tcr", "Tr", "Qual", "Voltage", "Power",
-    "Library Path", "Library Ref",
-    "Footprint Path", "Footprint Ref",
-    "Footprint Path 2", "Footprint Ref 2",
-    "Footprint Path 3", "Footprint Ref 3",
-]
+# Rows follow the shared database standard (vendors/_standard.py): every
+# standard resistor column, plus the extra columns below, which only reach
+# the workbook when the family enables them (``extra_parameters`` option).
+# Three Footprint Path / Ref pairs hold IPC-7351B density variants
+# (Nominal / Least / Most) of the same physical part. No alternates
+# (MFG 2, MPN 2) .. (MFG 5, MPN 5): Stackpole's RMCF/RNCF orderable MPNs
+# already encode their reel-size code in the trailing letter (no
+# reel-format-only variants beyond the orderable MPN).
+KIND = "R"
+SUPPORTED_EXTRAS = ("power",)
 
 SCHLIB = r"house.SchLib"
 PCBLIB = r"house.PcbLib"
@@ -203,14 +196,18 @@ _TCR_RE = re.compile(
 )
 
 
-def parse_resistance(raw: str) -> float | None:
-    """Convert Stackpole's ohmic-value string to a float in ohms.
-    Returns ``None`` if the string isn't parseable (e.g. blanks,
-    "Jumper" sentinels, anything other than ``<number><unit>ohm``)."""
+def parse_resistance(raw: str) -> Decimal | None:
+    """Convert Stackpole's ohmic-value string to an exact Decimal in
+    ohms (no float noise like ``4990.000000000001``). Returns ``None``
+    if the string isn't parseable (e.g. blanks, "Jumper" sentinels,
+    anything other than ``<number><unit>ohm``)."""
     m = _OHM_RE.match(raw or "")
     if not m:
         return None
-    value = float(m.group(1))
+    try:
+        value = Decimal(m.group(1))
+    except InvalidOperation:
+        return None
     unit = (m.group(2) or "").lower()
     if unit == "k":
         value *= 1_000
@@ -219,34 +216,39 @@ def parse_resistance(raw: str) -> float | None:
     return value
 
 
-def format_resistance(value: float) -> str:
-    """``4700.0`` -> ``'4.7k'``; ``100.0`` -> ``'100'``;
-    ``1_000_000.0`` -> ``'1M'``. Mirrors
-    :func:`vendors.yageo._yageo_common.format_resistance`."""
-    if value < 1000:
-        return f"{value:g}"
-    if value < 1_000_000:
-        return f"{value / 1000:g}k"
-    return f"{value / 1_000_000:g}M"
+def format_resistance(value) -> str:
+    """``4700`` -> ``'4.7k'``; ``100`` -> ``'100'``; ``1000000`` ->
+    ``'1M'`` (database-standard Value text)."""
+    return _standard.ohms(value)
+
+
+_PERCENT_RE = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*%\s*$")
 
 
 def format_tolerance(raw: str) -> str:
-    """Strip surrounding whitespace; Stackpole already emits
-    tolerances in the canonical ``"1%"`` / ``"0.1%"`` / ``"0.05%"``
-    form the rest of the library uses. Jumper rows arrive as
-    ``"< 0.05 ohm"`` (they're 0-ohm parts, not tolerance-bound);
-    pass those through unchanged so they're still queryable."""
-    return (raw or "").strip()
+    """Canonical percentage text: ``"1%"`` -> ``'1%'``, ``"0.050%"`` ->
+    ``'0.05%'``. Jumper rows arrive as ``"< 0.05 ohm"`` -- a maximum
+    resistance, not a tolerance -- and become blank (the database
+    standard's Tolerance holds percentages only). Anything else passes
+    through stripped so :func:`vendors._standard.write_sheet` rejects it
+    loudly."""
+    s = (raw or "").strip()
+    m = _PERCENT_RE.match(s)
+    if m:
+        return _standard.number(m.group(1)) + "%"
+    if "ohm" in s.lower():
+        return ""
+    return s
 
 
 def normalize_tcr(raw: str) -> str:
-    """Convert Stackpole's TCR strings to the library's compact
-    ASCII form. Examples (input -> output):
+    """Convert Stackpole's TCR strings to the database-standard compact
+    ASCII form (ppm/C implied, so no unit). Examples (input -> output):
 
-        ``"+/- 100 ppm"``       -> ``"+/-100 ppm"``
-        ``"+/- 50 ppm"``        -> ``"+/-50 ppm"``
-        ``"± 25 ppm"``          -> ``"+/-25 ppm"``
-        ``"-100/+200 ppm"``     -> ``"-100/+200 ppm"``
+        ``"+/- 100 ppm"``       -> ``"+/-100"``
+        ``"+/- 50 ppm"``        -> ``"+/-50"``
+        ``"± 25 ppm"``          -> ``"+/-25"``
+        ``"-100/+200 ppm"``     -> ``"-100/+200"``
         ``"N/A"`` / ``""``      -> ``""``
     """
     s = (raw or "").strip()
@@ -260,9 +262,9 @@ def normalize_tcr(raw: str) -> str:
     b = m.group("b")
     sym = (m.group("sym") or "").replace("-/+", "+/-").replace("±", "+/-").replace(" ", "")
     if b is None:
-        return f"+/-{a} ppm" if sym in ("+/-", "+", "") else f"{sym}{a} ppm"
+        return f"+/-{a}" if sym in ("+/-", "+", "") else f"{sym}{a}"
     sym2 = m.group("sym2") or "+"
-    return f"-{a}/{sym2}{b} ppm"
+    return f"-{a}/{sym2}{b}"
 
 
 def format_power_w(raw: str) -> str:
@@ -286,18 +288,15 @@ def format_power_w(raw: str) -> str:
 
 
 def format_voltage_v(raw: str) -> str:
-    """``"150"`` -> ``'150V'``; ``"1000"`` -> ``'1kV'``. Stackpole
-    parametric search returns voltage as a plain integer string."""
+    """``"150"`` -> ``'150V'``; ``"1000"`` -> ``'1000V'`` (database-standard
+    Voltage: plain volts, no SI prefix). Stackpole parametric search
+    returns voltage as a plain integer string."""
     if not raw:
         return ""
     try:
-        v = float(raw)
-    except ValueError:
+        return _standard.number(Decimal(raw.strip())) + "V"
+    except InvalidOperation:
         return raw.strip()
-    if v >= 1000:
-        kv = v / 1000
-        return f"{int(kv)}kV" if kv == int(kv) else f"{kv:g}kV"
-    return f"{int(v)}V" if v == int(v) else f"{v:g}V"
 
 
 def format_temp_range(tmin: str, tmax: str) -> str:
@@ -319,17 +318,17 @@ def row_for_part(
     family_id: str,
     size_to_footprint: Mapping[str, tuple],
     qualifications: str,
-    description_kind: str,
+    construction: str,
 ) -> tuple | None:
-    """Return ``(row, fp_root, eia)`` for a CSV row, or ``None`` if the
+    """Return ``(record, fp_root, eia)`` for a CSV row, or ``None`` if the
     part should be dropped (size not in ``size_to_footprint``, ohmic
     value unparseable, or disabled by the active BuildConfig).
 
-    ``description_kind`` is the human-readable technology phrase
-    inserted into the Description column (``"THICK FILM"`` for RMCF,
-    ``"THIN FILM"`` for RNCF) so the row text matches the
-    Panasonic ERJ / Yageo RC / Yageo RT convention used elsewhere
-    in the catalog.
+    ``record`` is a dict holding every database-standard resistor column
+    plus the :data:`SUPPORTED_EXTRAS` columns, ready for
+    :func:`vendors._standard.write_sheet`. ``construction`` is the film
+    type for the Description (``"THICK FILM"`` for RMCF, ``"THIN FILM"``
+    for RNCF); 0-ohm parts become ``RESISTOR JUMPER 0 OHM <package>``.
     """
     eia = csv_row.get("size", "").strip()
     if eia not in size_to_footprint:
@@ -357,28 +356,36 @@ def row_for_part(
     )
 
     value = format_resistance(ohms)
-    description = (
-        f"RESISTOR {description_kind} {value} OHM {tol} {eia}"
-    ).strip()
+    package = eia.upper()
 
-    fp_cells = _common.xls_footprint_columns(PCBLIB, fp_root, family_id)
+    fp_path, fp_ref, fp_path2, fp_ref2, fp_path3, fp_ref3 = (
+        _common.xls_footprint_columns(PCBLIB, fp_root, family_id)
+    )
 
-    row = [
-        mpn,                          # Comment
-        description,                  # Description
-        MFG,                          # MFG ("Stackpole Electronics")
-        mpn,                          # MPN
-        eia,                          # Package
-        value,                        # Value
-        tol,                          # Tolerance
-        tcr,                          # Tcr
-        tr,                           # Tr
-        qualifications,               # Qual
-        volts,                        # Voltage
-        power,                        # Power
-        SCHLIB, "RES",                # Library Path / Ref
-    ] + fp_cells
-    return row, fp_root, eia
+    record = {
+        "Comment": mpn,
+        "Description": _standard.resistor_description(construction, value, tol, package),
+        "MFG": MFG,
+        "MPN": mpn,
+        "Package": package,
+        "Library Path": SCHLIB,
+        "Library Ref": "RES",
+        "Footprint Path": fp_path,
+        "Footprint Ref": fp_ref,
+        "Footprint Path 2": fp_path2,
+        "Footprint Ref 2": fp_ref2,
+        "Footprint Path 3": fp_path3,
+        "Footprint Ref 3": fp_ref3,
+        "Qual": qualifications,
+        "Value": value,
+        "Tolerance": tol,
+        "Voltage": volts,
+        "Tcr": tcr,
+        "Tr": tr,
+        # Extra (non-standard) column; emitted only when enabled.
+        "Power": power,
+    }
+    return record, fp_root, eia
 
 
 # --- Per-vendor footprints JSON helper ------------------------------------
