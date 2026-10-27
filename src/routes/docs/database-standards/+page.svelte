@@ -132,9 +132,7 @@
 		['Tolerance', '5%'],
 		['Voltage', '75V'],
 		['Tcr', '+/-200'],
-		['Tr', '-55:155'],
-		['Power (supplemental)', '0.1W'],
-		['Datasheet (supplemental)', 'https://www.vishay.com/docs/20035/dcrcwe3.pdf']
+		['Tr', '-55:155']
 	];
 
 	const th = 'px-4 py-2 text-left';
@@ -208,9 +206,8 @@
 
 	<h2 class="pt-4 text-xl font-semibold text-ink-900">Database fields</h2>
 	<p>
-		Every workbook lists the common fields first, then the fields for its component type. Columns
-		this standard does not define, such as Power or Datasheet, follow after those and obey the same
-		general rules.
+		Every workbook lists the common fields first, then the fields for its component type, and no
+		other columns.
 	</p>
 	<h3 class="pt-2 text-base font-semibold text-ink-900">Common fields (all types)</h3>
 	{@render fieldTable(commonFields, 'Column', 'Content')}

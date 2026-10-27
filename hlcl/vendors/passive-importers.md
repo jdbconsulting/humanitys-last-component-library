@@ -70,8 +70,9 @@ lowest TCR offered for each value: `FK` for 47 ohm–1 Mohm, `FN`/`JN` for
 10 ohm–10 Mohm otherwise, and `FX`/`JX` (-200/+400 ppm) below 10 ohm.
 
 CRCW workbooks follow the website's database standard (`/docs/database-standards/`).
-`csv_main(..., standard=True)` writes the standard columns in order, then Power,
-Features, Rating Conditions and Datasheet. Descriptions read
+`csv_main(..., standard=True)` writes only the standard columns, in order. Power,
+features, rating conditions and the datasheet link are not emitted; the decoder
+and the notes above record them. Descriptions read
 `RESISTOR THICK FILM 4.7K OHM 5% 0603`, or `RESISTOR JUMPER 0 OHM 0402` for jumpers.
 A non-ASCII field, a description that is not all caps, or one ending in a period
 fails the build. Other datasheet-backed families still use the legacy layout.

@@ -150,6 +150,7 @@ class PassiveCatalogTests(unittest.TestCase):
             return dict(zip(RESISTOR_HEADERS,cells))
         r = row('CRCW06034K70JNEA')
         self.assertEqual(len(r),len(RESISTOR_HEADERS))
+        self.assertEqual(RESISTOR_HEADERS[13:],['Qual','Value','Tolerance','Voltage','Tcr','Tr'])
         self.assertEqual((r['Description'],r['MFG'],r['Package'],r['Value'],r['Tolerance'],
                           r['Voltage'],r['Tcr'],r['Tr'],r['Qual'],r['Library Ref']),
                          ('RESISTOR THICK FILM 4.7K OHM 5% 0603','VISHAY','0603','4.7k','5%',

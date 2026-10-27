@@ -5,7 +5,7 @@
 		"releasedOn": null,
 		"changes": [
 			"Add Vishay CRCW 0201 from its separate commercial datasheet: 969 component entries with ±100, ±200 and −200/+400 ppm grades plus a 0 Ω jumper. CRCW 0201 is not AEC-Q200 qualified.",
-			"Standardize Vishay CRCW workbook rows: all-caps descriptions such as RESISTOR THICK FILM 4.7K OHM 5% 0603, upper-case manufacturer names, ASCII-only fields, and the standard column order. Rows that break these rules now fail the build.",
+			"Standardize Vishay CRCW workbook rows: all-caps descriptions such as RESISTOR THICK FILM 4.7K OHM 5% 0603, upper-case manufacturer names, ASCII-only fields, and only the standard columns, in standard order. The Power, Features, Rating Conditions and Datasheet columns are removed. Rows that break these rules now fail the build.",
 			"Add a Database standards docs page covering description formats, parameter conventions, and workbook columns.",
 			"Add a workbook viewer to the Generate tab for inspecting generated .xls rows and columns, including non-ASCII cell checks, before downloading.",
 			"The full default library now has 67,692 component entries, 351 footprints (including L/N/M density variants), and 28 families."

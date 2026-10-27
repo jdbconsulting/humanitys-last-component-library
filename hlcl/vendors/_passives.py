@@ -26,13 +26,12 @@ HEADERS = [
     "Footprint Path 3", "Footprint Ref 3",
 ]
 # Database standard (website docs: /docs/database-standards): common fields,
-# then resistor fields, then supplemental columns the standard does not cover.
+# then resistor fields, and nothing the standard does not define.
 RESISTOR_HEADERS = [
     "Comment", "Description", "MFG", "MPN", "Package", "Library Path",
     "Library Ref", "Footprint Path", "Footprint Ref", "Footprint Path 2",
     "Footprint Ref 2", "Footprint Path 3", "Footprint Ref 3", "Qual",
     "Value", "Tolerance", "Voltage", "Tcr", "Tr",
-    "Power", "Features", "Rating Conditions", "Datasheet",
 ]
 
 
@@ -113,7 +112,7 @@ class Part:
                  self.package.upper(), "house.SchLib", "RES",
                  *_common.xls_footprint_columns("house.PcbLib", self.geometry["root"], family),
                  self.qualification, self.value, self.tolerance, self.voltage, self.tcr,
-                 self.temperature, self.power, self.features, self.conditions, self.datasheet]
+                 self.temperature]
         if (description != description.upper() or description.endswith(".")
                 or not all(cell.isascii() for cell in cells)):
             raise ValueError(f"{self.mpn}: row violates the database standard: {cells!r}")
