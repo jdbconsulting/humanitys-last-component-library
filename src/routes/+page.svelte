@@ -27,7 +27,7 @@
 
 	// Full default build: hlcl/build_stats.py counts workbook rows and merged
 	// footprints (including L/N/M density variants); the catalog has 28 families.
-	const heroStats = ['66,723 components!', '348 footprints', '28 families'] as const;
+	const heroStats = ['67,692 components!', '351 footprints', '28 families'] as const;
 
 	// Hand-curated family list for the marketing grid below. Kept in
 	// sync with the on-disk catalog (`hlcl/vendors/<mfg>/<family>/catalog.json`,
@@ -47,7 +47,7 @@
 				'Yageo RT — precision thin film, 01005–1206 (5–50 ppm/°C)',
 				'Stackpole RNCF — precision thin film AEC-Q200, 0201–1206',
 				'Ohmite KDV — metal-film current-sense, 0201–1206',
-				'Vishay CRCW — thick film AEC-Q200, 0402–2512 (1% / 5%, jumpers)',
+				'Vishay CRCW — thick film, 0201–2512 (AEC-Q200 from 0402; 1% / 5%, jumpers)',
 				'Vishay RCS — anti-surge thick film AEC-Q200, 0402–1206',
 				'Vishay RCP — power thick film, 0603 / 2512 (wide terminals)',
 				'Vishay MC Precision — thin film, 0402–1206 (0.1%, 25 ppm/°C)',
