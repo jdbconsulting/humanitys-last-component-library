@@ -1,8 +1,8 @@
 [
 	{
 		"version": "0.3.0",
-		"status": "unreleased",
-		"releasedOn": null,
+		"status": "released",
+		"releasedOn": "2026-10-27",
 		"changes": [
 			"Add the Vishay CRCW standard thick-film family: 7,658 component entries from 0402 to 2512, covering 1% (E24/E96) and 5% (E24) grades and 0 Ω jumpers.",
 			"Add 1218 (3246) and 2010 (5025) package selections. The full default library now has 66,723 component entries, 348 footprints (including L/N/M density variants), and 28 families.",
