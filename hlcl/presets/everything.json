@@ -4,7 +4,7 @@
 	"tagline": "All families",
 	"description": "Every vendor family this build chain knows about, every density variant, every artifact (including both standards renderings). Slowest preset to build; biggest output set.",
 	"bullets": [
-		"All 28 family generators turned on (resistors, MLCC, ferrites, inductors)",
+		"All 29 family generators turned on (resistors, MLCC, ferrites, inductors)",
 		"L / N / M density variants emitted everywhere",
 		"Standards .tex + .md + house.SchLib + house.PcbLib all packaged",
 		"Useful as a regression baseline"
@@ -318,6 +318,19 @@
 				"options": {
 					"enabled_densities": ["L", "N", "M"],
 					"sizes": ["0201", "0402", "0603", "0805", "1206", "1210", "1218", "2010", "2512"],
+					"override_pad_radius": 25
+				},
+				"overrides": {
+					"enabled_densities": false,
+					"sizes": false,
+					"override_pad_radius": false
+				}
+			},
+			"vishay-tnpw": {
+				"enabled": true,
+				"options": {
+					"enabled_densities": ["L", "N", "M"],
+					"sizes": ["0201", "0402", "0603", "0805", "1206", "1210"],
 					"override_pad_radius": 25
 				},
 				"overrides": {

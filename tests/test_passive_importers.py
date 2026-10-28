@@ -36,7 +36,7 @@ def find_part(family, mpn):
 class PassiveCatalogTests(unittest.TestCase):
     def test_all_catalog_rows_decode_and_have_distinct_mpns(self):
         for family in ('murata-gcd', 'murata-krm', 'kemet-x7r', 'kemet-open-mode',
-                       'kemet-esd-c0g', 'tdk-c', 'vishay-crcw', 'vishay-rcs', 'vishay-rcp',
+                       'kemet-esd-c0g', 'tdk-c', 'vishay-crcw', 'vishay-tnpw', 'vishay-rcs', 'vishay-rcp',
                        'vishay-mc-precision', 'vishay-mc-at'):
             with self.subTest(family=family):
                 rows = catalog(family)
@@ -54,6 +54,11 @@ class PassiveCatalogTests(unittest.TestCase):
             ('vishay-crcw','CRCW020110K0FNED','10k','1%','0.05W'),
             ('vishay-crcw','CRCW04021R00FNED','1','1%','0.063W'),
             ('vishay-crcw','CRCW0603562RFKEA','562','1%','0.1W'),
+            ('vishay-tnpw','TNPW12061K32DEEA','1.32k','0.5%','0.27W'),  # datasheet example
+            ('vishay-tnpw','TNPW040228K0BEED','28k','0.1%','0.07W'),
+            ('vishay-tnpw','TNPW020122R0DEED','22','0.5%','0.05W'),
+            ('vishay-tnpw','TNPW08053R52BYEA','3.52','0.1%','0.14W'),
+            ('vishay-tnpw','TNPW12061K32DETA','1.32k','0.5%','0.25W'),  # SnPb
             ('vishay-crcw','CRCW04024K70JNED','4.7k','5%','0.063W'),
             ('vishay-crcw','CRCW121810K0FKEK','10k','1%','1W'),
             ('vishay-crcw','CRCW201010K0FKEF','10k','1%','0.75W'),
@@ -90,6 +95,13 @@ class PassiveCatalogTests(unittest.TestCase):
                             ('vishay-crcw','CRCW02011K00FKEA'),  # EA is not a 0201 reel
                             ('vishay-crcw','CRCW02019R10JNED'),  # 0201 5% below 10 ohm is JX
                             ('vishay-crcw','CRCW04021R00FXED'),  # X TCR is 0201 only
+                            ('vishay-tnpw','TNPW0603100RBXEC'),  # EC reel only for 25/50 ppm
+                            ('vishay-tnpw','TNPW0201100RFEED'),  # 0201 has no 1% grade
+                            ('vishay-tnpw','TNPW12102M20BEEA'),  # 1210 0.1% stops at 2.13 Mohm
+                            ('vishay-tnpw','TNPW06031K01FEEA'),  # E192-only value at 1%
+                            ('vishay-tnpw','TNPW0201100RDETD'),  # no SnPb 0201
+                            ('vishay-tnpw','TNPW0402100RDETP'),  # SnPb TP reel only at 0.1%
+                            ('vishay-tnpw','TNPW0402100RFEEA'),  # 0402 reel is ED
                             ('vishay-rcs','RCS040210K0FKEA'),
                             ('vishay-rcs','RCS08052491FKEA'),
                             ('vishay-mc-at','MCS04020D2491BE000'),
@@ -145,22 +157,56 @@ class PassiveCatalogTests(unittest.TestCase):
             self.assertEqual((g['root'],g['bodyMm']['terminalLengthNominal'],
                               g['model']['topTerminalLengthMm']),(root,bottom,top))
 
-    def test_crcw_catalog_lists_every_grade_the_decoder_accepts(self):
-        rows = {r['mpn'] for r in catalog('vishay-crcw')}
-        reels = {m[4:8]: m[14:] for m in rows}
+    def assert_catalog_complete(self, family, grades):
+        """Every grade/value the decoder accepts on each size's catalog reel is listed."""
+        rows = {r['mpn'] for r in catalog(family)}
+        reels = {(m[:8], m[14:]) for m in rows}
         codes = {m[8:12] for m in rows}
         missing = []
-        for size, reel in reels.items():
+        for model_size, reel in reels:
             for code in codes:
-                for grade in ('FK','FN','FX','JN','JX','Z0'):
-                    mpn = f'CRCW{size}{code}{grade}{reel}'
+                for grade in grades:
+                    mpn = f'{model_size}{code}{grade}{reel}'
                     try:
-                        resistor({'mpn':mpn},'vishay-crcw')
+                        resistor({'mpn':mpn},family)
                     except ValueError:
                         continue
                     if mpn not in rows:
                         missing.append(mpn)
         self.assertEqual(missing, [])
+
+    def test_crcw_catalog_lists_every_grade_the_decoder_accepts(self):
+        self.assert_catalog_complete('vishay-crcw', ('FK','FN','FX','JN','JX','Z0'))
+
+    def test_tnpw_catalog_lists_every_grade_the_decoder_accepts(self):
+        self.assert_catalog_complete('vishay-tnpw', [t + c for t in 'FDB' for c in 'HEXY'])
+
+    def test_tnpw_options_and_alternates(self):
+        importer = load_module(str(ROOT/'hlcl/vendors/vishay/tnpw/importer.py'))
+        parts = [importer.decode(r) for r in catalog('vishay-tnpw')]
+
+        def chosen(**options):
+            raw = json.loads((ROOT/'hlcl/factory-defaults.json').read_text())
+            raw['families']['vishay-tnpw']['options'].update(options)
+            with patch.object(importer._config, 'current', return_value=importer._config.from_dict(raw)):
+                return [p.mpn for p in importer.select(parts)]
+
+        default = chosen()
+        self.assertEqual(len(default), 37622)  # e3 only, every TCR, tolerance and E192 value
+        self.assertFalse(any(m[14:] in importer.SNPB_REELS for m in default))
+        self.assertEqual(len(chosen(terminations=['e3', 'snpb'])), len(parts))
+        lowest = chosen(lowest_tcr_only=True)
+        self.assertEqual(len(lowest), len({(m[:13], m[14:]) for m in default}))
+        self.assertIn('TNPW0805100RBYEA', lowest)  # 10 ppm wins at 0.1%
+        self.assertNotIn('TNPW0805100RBEEA', lowest)
+        self.assertEqual({m[12] for m in chosen(tolerance_options=['B'])}, {'B'})
+        self.assertNotIn('TNPW08051K01DEEA', chosen(value_series='e96'))  # 1.01k is E192-only
+        self.assertIn('TNPW08051K02DEEA', chosen(value_series='e96'))
+
+        record = resistor({'mpn':'TNPW06031K00BEEA'},'vishay-tnpw').record('vishay-tnpw')
+        self.assertEqual(record['MPN 2'], 'TNPW06031K00BEEC')
+        record = resistor({'mpn':'TNPW06031K00BXEA'},'vishay-tnpw').record('vishay-tnpw')
+        self.assertEqual(record['MPN 2'], '')  # no 20,000-piece reel at 15 ppm
 
     def test_crcw_tcr_options_and_reel_alternates(self):
         importer = load_module(str(ROOT/'hlcl/vendors/vishay/crcw/importer.py'))

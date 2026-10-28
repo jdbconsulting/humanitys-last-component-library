@@ -1,4 +1,4 @@
-"""Ordering-code decoders for the reviewed CRCW, RCS, RCP and MC subfamilies.
+"""Ordering-code decoders for the reviewed CRCW, TNPW, RCS, RCP and MC subfamilies.
 
 The curated input lists can grow independently of the decoders; unsupported
 suffixes, ranges and case/packing combinations fail the build.
@@ -13,7 +13,59 @@ RCS = 'https://www.vishay.com/docs/20065/rcse3.pdf'
 RCP = 'https://www.vishay.com/docs/31098/rcp.pdf'
 MC = 'https://www.vishay.com/docs/28700/mcx0x0xpre.pdf'
 MCAT = 'https://www.vishay.com/docs/28952/mcr0201at-mca1206at.pdf'
+TNPW = 'https://www.vishay.com/docs/28758/tnpw_e3.pdf'
+TNPW_SNPB = 'https://www.vishay.com/docs/31006/tnpw.pdf'
 E24 = (10,11,12,13,15,16,18,20,22,24,27,30,33,36,39,43,47,51,56,62,68,75,82,91)
+E192 = (100,101,102,104,105,106,107,109,110,111,113,114,115,117,118,120,121,123,124,126,127,129,130,132,
+        133,135,137,138,140,142,143,145,147,149,150,152,154,156,158,160,162,164,165,167,169,172,174,176,178,
+        180,182,184,187,189,191,193,196,198,200,203,205,208,210,213,215,218,221,223,226,229,232,234,237,240,
+        243,246,249,252,255,258,261,264,267,271,274,277,280,284,287,291,294,298,301,305,309,312,316,320,324,
+        328,332,336,340,344,348,352,357,361,365,370,374,379,383,388,392,397,402,407,412,417,422,427,432,437,
+        442,448,453,459,464,470,475,481,487,493,499,505,511,517,523,530,536,542,549,556,562,569,576,583,590,
+        597,604,612,619,626,634,642,649,657,665,673,681,690,698,706,715,723,732,741,750,759,768,777,787,796,
+        806,816,825,835,845,856,866,876,887,898,909,920,931,942,953,965,976,988)
+E96 = E192[::2]
+
+
+def in_series(value, series):
+    """True if ``value`` (ohms) has a mantissa from ``series`` ('E24', 'E96' or 'E192')."""
+    digits = value.scaleb(2 - value.adjusted())  # three significant digits, 100..999
+    return digits in {x * 10 for x in E24} if series == 'E24' else digits in (E96 if series == 'E96' else E192)
+
+
+def _tnpw_grid(f_lo, hi, b_lo, xy_lo, b_hi=None):
+    """(TCR, tolerance) -> (min, max) ohms for one TNPW e3 size (doc 28758 p.3-4):
+    H/E (50/25 ppm) at F/D/B (1/0.5/0.1%), X/Y (15/10 ppm) at B only."""
+    b_hi = b_hi or hi
+    grid = {(t, 'B'): (xy_lo, b_hi) for t in 'XY'}
+    for t in 'HE':
+        grid.update({(t, 'F'): (f_lo, hi), (t, 'D'): (f_lo, hi), (t, 'B'): (b_lo, b_hi)})
+    return grid
+
+
+def _tnpw_snpb_grid(hi, b_hi=None):
+    """Narrower SnPb grid (doc 31006 p.2): H at F, E at D/B, X/Y at B."""
+    b_hi = b_hi or hi
+    return {('H', 'F'): (10, hi), ('E', 'D'): (10, hi), ('E', 'B'): (47, b_hi),
+            ('X', 'B'): (47, b_hi), ('Y', 'B'): (47, b_hi)}
+
+
+_k, _M, _3R5 = 1000, 1000000, Decimal('3.5')
+TNPW_RANGES = {
+    'e3': {
+        '0201': {('E', 'D'): (22, 40*_k), ('E', 'B'): (22, 25*_k)},
+        '0402': _tnpw_grid(10, 100*_k, 47, 47),
+        '0603': _tnpw_grid(1, 332*_k, _3R5, 47),
+        '0805': _tnpw_grid(1, _M, _3R5, _3R5),
+        '1206': _tnpw_grid(1, 2*_M, _3R5, 47),
+        '1210': _tnpw_grid(10, Decimal('3.01')*_M, 47, 47, Decimal('2.13')*_M),
+    },
+    'snpb': {
+        '0402': _tnpw_snpb_grid(100*_k), '0603': _tnpw_snpb_grid(332*_k),
+        '0805': _tnpw_snpb_grid(_M), '1206': _tnpw_snpb_grid(2*_M),
+        '1210': _tnpw_snpb_grid(Decimal('3.01')*_M, Decimal('2.13')*_M),
+    },
+}
 
 
 def decode(row, family):
@@ -66,6 +118,56 @@ def decode(row, family):
         # Same part on the size's other datasheet reels.
         alternates = tuple(mpn[:-2] + other for other in packs if other != packing)
         extra['model'] = {'type': 'wide-bottom', 'topTerminalLengthMm': top}
+    elif family == 'vishay-tnpw':
+        m = re.fullmatch(r'TNPW(0201|0402|0603|0805|1206|1210)([0-9RKM]{4})([BDF])([HEXY])(E[ACD]|T[ADP]|CN)', mpn)
+        if not m:
+            raise ValueError(f'invalid TNPW code: {mpn}')
+        size, code, tol_code, tcr_code, packing = m.groups()
+        finish = 'snpb' if packing in ('TA', 'TD', 'TP', 'CN') else 'e3'
+        if code[0] == '0' or sum(c in 'RKM' for c in code) != 1:
+            raise ValueError(f'{mpn}: TNPW requires one embedded resistance unit and no leading zero')
+        value = code_value(code)
+        lower, upper = TNPW_RANGES[finish].get(size, {}).get((tcr_code, tol_code), (0, -1))
+        if not lower <= value <= upper:
+            raise ValueError(f'invalid TNPW size/grade/range: {mpn}')
+        if not in_series(value, 'E24') and not in_series(value, 'E96' if tol_code == 'F' else 'E192'):
+            raise ValueError(f'{mpn}: TNPW 1% values are E24/E96 and tighter ones E24/E192')
+        # Reels per size (28758 p.4; 31006 p.2). EC (20,000) exists only for
+        # 25/50 ppm; SnPb TP/CN (1,000) only for 0.1%.
+        if finish == 'e3':
+            packs = ('ED',) if size in ('0201', '0402') else ('EA',) + (('EC',) if tcr_code in 'HE' else ())
+        else:
+            packs = (('TD',) if size == '0402' else ('TA',)) + (((('TP',) if size == '0402' else ('CN',))) if tol_code == 'B' else ())
+        if packing not in packs:
+            raise ValueError(f'invalid TNPW reel for {size} {tol_code}{tcr_code}: {mpn}')
+        # Nominal L/W, maximum H, terminal (top = bottom) from both dimension tables.
+        metric,L,W,H,T = {'0201': ('0603',.6,.3,.26,.12), '0402': ('1005',1,.5,.40,.2),
+                          '0603': ('1608',1.55,.85,.55,.3), '0805': ('2012',2,1.25,.55,.4),
+                          '1206': ('3216',3.2,1.6,.65,.5), '1210': ('3225',3.2,2.45,.75,.5)}[size]
+        if finish == 'e3':
+            # General operation mode: lowest drift; power/advanced modes trade
+            # drift for dissipation and are not advertised here.
+            power, voltage = {'0201': (.05,25), '0402': (.07,75), '0603': (.11,100),
+                              '0805': (.14,150), '1206': (.27,200), '1210': (.33,200)}[size]
+            source, features = TNPW, 'thin film; sulfur resistant'
+            conditions = ('P70 general operation mode, film <=125 C; power/advanced modes allow more '
+                          'dissipation with more drift; working voltage <= min(Umax, sqrt(P*R))')
+        else:
+            power, voltage = {'0402': (.063,50), '0603': (.1,75), '0805': (.125,150),
+                              '1206': (.25,200), '1210': (.33,200)}[size]
+            source, features = TNPW_SNPB, 'thin film; SnPb termination (lead-bearing)'
+            conditions = 'P70 ambient rating, film <=155 C; working voltage <= min(Umax, sqrt(P*R))'
+        tol = {'B': '0.1%', 'D': '0.5%', 'F': '1%'}[tol_code]
+        tcr = {'H': '+/-50', 'E': '+/-25', 'X': '+/-15', 'Y': '+/-10'}[tcr_code]
+        qual, temp = 'AEC-Q200', '-55:125'
+        qualifier, construction = 'TNPW', 'THIN FILM'
+        alternates = tuple(mpn[:-2] + other for other in packs if other != packing)
+        # One geometry note for both finishes: their dimension tables agree.
+        geom = body('RESC', metric, H, qualifier, L, W, T,
+                    f'{TNPW} and {TNPW_SNPB}; maximum height; nominal L/W and terminals')
+        return Part(mpn, 'Vishay', size, 'R', resistance(value), tol, tcr, temp, qual,
+                    number(voltage)+'V', number(power)+'W', features, conditions, source, geom,
+                    construction, alternates)
     elif family == 'vishay-rcs':
         m = re.fullmatch(r'RCS(0402|0603|0805|1206)([0-9RKM]{4})(FK|DK|JN|Z0)(E[A-C]|E[D-I])', mpn)
         if not m:
@@ -147,3 +249,37 @@ def decode(row, family):
     return Part(mpn,'Vishay',size,'R',resistance(value),tol,tcr,temp,qual,
                 number(voltage)+'V' if voltage != '' else '',number(power)+'W' if power != '' else '',
                 features,conditions,source,geom,construction,alternates)
+
+
+
+def tcr_ppm(tcr):
+    """Worst-case magnitude of a Tcr field: '+/-25' -> 25, '-200/+400' -> 400."""
+    return max(int(x) for x in re.findall(r'\d+', tcr))
+
+
+def select_grades(parts, options, tcr_codes, tolerance_codes=''):
+    """Apply grade options to parts whose MPN is <model><size><4-character value>
+    <tolerance letter><TCR letter><reel> (CRCW, TNPW).
+
+    Keeps the ticked ``tcr_options`` (and ``tolerance_options`` when
+    ``tolerance_codes`` is given); with ``lowest_tcr_only`` keeps only the
+    tightest TCR per size, value, tolerance and reel. Parts without a TCR
+    (jumpers) always pass.
+    """
+    def chosen(option, codes):
+        picked = set(options.get_option(option, list(codes)))
+        if picked - set(codes):
+            raise ValueError(f'unknown {option}: {sorted(picked - set(codes))}')
+        return picked
+    tcrs = chosen('tcr_options', tcr_codes)
+    tols = chosen('tolerance_options', tolerance_codes) if tolerance_codes else None
+    kept = [p for p in parts if not p.tcr
+            or (p.mpn[13] in tcrs and (tols is None or p.mpn[12] in tols))]
+    if not options.get_option('lowest_tcr_only', False):
+        return kept
+    key = lambda p: (p.mpn[:12], p.mpn[12], p.mpn[14:])
+    best = {}
+    for p in kept:
+        if p.tcr and (key(p) not in best or tcr_ppm(p.tcr) < tcr_ppm(best[key(p)].tcr)):
+            best[key(p)] = p
+    return [p for p in kept if not p.tcr or best[key(p)] is p]
