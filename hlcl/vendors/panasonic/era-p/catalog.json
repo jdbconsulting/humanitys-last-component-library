@@ -11,6 +11,25 @@
 	"available_sizes": ["1206"],
 	"options": [
 		{
+			"id": "footprint_names",
+			"label": "Footprint names",
+			"help": "Vendor-specific names keep this family's footprints separate from every other family. Generic IPC-7351B names can be shared with other families; the Priorities tab chooses which family's geometry wins when names overlap.",
+			"control": {
+				"kind": "select",
+				"default_value": "vendor",
+				"choices": [
+					{
+						"id": "vendor",
+						"label": "Vendor-specific, e.g. RESC3216X55_ERAPN"
+					},
+					{
+						"id": "generic",
+						"label": "Generic IPC-7351B, e.g. RESC3216X55N"
+					}
+				]
+			}
+		},
+		{
 			"id": "extra_parameters",
 			"label": "Extra / non-standard parameters",
 			"help": "Columns outside the database standard. Ticked columns are added after the standard ones.",

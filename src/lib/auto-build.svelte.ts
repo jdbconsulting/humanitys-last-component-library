@@ -9,11 +9,13 @@
  * while a rebuild is due. A configuration that failed is not retried
  * automatically until it changes (or the user clicks Build now).
  */
+import type { CollisionReport } from './collisions';
 import { consoleLog } from './console.svelte';
 import {
 	cleanBuild,
 	computeBuildStats,
 	listBuildOutputs,
+	readFootprintCollisions,
 	runBuild,
 	type BuildOutputFile
 } from './hlcl-runner';
@@ -27,6 +29,8 @@ class AutoBuild {
 	outputs = $state<BuildOutputFile[]>([]);
 	builtConfig = $state.raw<BuildConfig | null>(null);
 	builtHash = $state<string | null>(null);
+	/** Footprint names several families emitted in the last build (Priorities tab). */
+	collisions = $state.raw<CollisionReport | null>(null);
 	/** Hash of the build in progress, or null when idle. */
 	buildingHash = $state<string | null>(null);
 	/** Hash waiting to build (debouncing or behind the running build). */
@@ -91,13 +95,16 @@ class AutoBuild {
 		try {
 			let outputs: BuildOutputFile[] = [];
 			let stats = { components: 0, unique_footprints: 0 };
+			let collisions: CollisionReport = { collisions: [], familyIds: {} };
 			if (Object.values(config.families).some((f) => f.enabled)) {
 				await cleanBuild();
 				await runBuild(config);
 				outputs = await listBuildOutputs();
 				stats = await computeBuildStats();
+				collisions = await readFootprintCollisions();
 			}
 			this.outputs = outputs;
+			this.collisions = collisions;
 			this.builtConfig = config;
 			this.builtHash = hash;
 			this.failedHash = null;

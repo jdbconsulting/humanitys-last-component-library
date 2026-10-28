@@ -24,6 +24,7 @@
 
 import { base } from '$app/paths';
 import { consoleLog } from './console.svelte';
+import type { CollisionReport } from './collisions';
 import { pyodide as py } from './pyodide';
 import type { BuildConfig } from './schema';
 
@@ -326,6 +327,17 @@ import build_stats
 json.dumps(build_stats.compute_build_stats(${pyStr(HLCL_ROOT)}))
 `);
 	return JSON.parse(String(result)) as BuildStats;
+}
+
+/** Footprint names more than one family emitted, from the house merge. */
+export async function readFootprintCollisions(): Promise<CollisionReport> {
+	const result = await py.runPython(`
+import json, os
+path = os.path.join(${pyStr(HLCL_ROOT)}, 'build', 'intermediate', 'footprints', 'house-footprints.json')
+doc = json.load(open(path)) if os.path.exists(path) else {}
+json.dumps({'collisions': doc.get('collisions', []), 'familyIds': doc.get('familyIds', {})})
+`);
+	return JSON.parse(String(result)) as CollisionReport;
 }
 
 /** One worksheet of a generated `.xls`, every cell rendered as text. */

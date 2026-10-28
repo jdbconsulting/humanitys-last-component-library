@@ -79,6 +79,20 @@ _FOOTPRINT_NAME_RE = re.compile(r"^(?P<prefix>CAPC|RESC|INDC)\d{4}X\d+(?:_[A-Z0-
 #: (Nominal), M (Most) labels.
 _VALID_DENSITY = frozenset("LNM")
 
+#: Per-family option choosing vendor-specific footprint names (the default,
+#: e.g. ``RESC0603X26_CRCWL``) or generic IPC-7351B names (``RESC0603X26L``).
+FOOTPRINT_NAMES_OPTION = "footprint_names"
+
+#: Vendor tag for families whose generators emit unqualified roots. Roots
+#: that already carry a qualifier (``_CRCW``, ``_SAMA``, ...) keep it.
+FAMILY_QUALIFIERS = {
+    "panasonic-erj": "ERJ", "panasonic-era-a": "ERAA", "panasonic-era-v": "ERAV",
+    "panasonic-era-p": "ERAP", "ohmite-kdv": "KDV", "yageo-rc": "RC", "yageo-ac": "AC",
+    "yageo-rt": "RT", "stackpole-rmcf": "RMCF", "stackpole-rncf": "RNCF",
+    "samsung-capacitors": "CL", "tdk-capacitors": "CGA", "murata-gcm": "GCM",
+    "murata-grm": "GRM", "murata-ferrites": "BLM", "murata-lqm": "LQM", "murata-lqw": "LQW",
+}
+
 
 def _validate_footprint(fp: Mapping) -> None:
     """Cheap sanity check on a footprint dict before serialising. Errors
@@ -279,6 +293,31 @@ def enabled_sizes(family_id: str) -> frozenset:
     return frozenset(_config.current().sizes_for(family_id))
 
 
+def footprint_naming(family_id: str) -> str:
+    """``"vendor"`` (default) or ``"generic"``, from the family's option."""
+    naming = _config.current().family(family_id).get_option(FOOTPRINT_NAMES_OPTION, "vendor")
+    if naming not in ("vendor", "generic"):
+        raise ValueError(f"{family_id}: {FOOTPRINT_NAMES_OPTION} must be vendor or generic, got {naming!r}")
+    return naming
+
+
+def footprint_root(root: str, family_id: str) -> str:
+    """``root`` renamed for the family's footprint naming option.
+
+    Generic names drop any ``_QUALIFIER``; vendor-specific names keep an
+    existing qualifier or append the family's tag from FAMILY_QUALIFIERS.
+    """
+    base, _, qualifier = root.partition("_")
+    if footprint_naming(family_id) == "generic":
+        return base
+    if qualifier:
+        return root
+    tag = FAMILY_QUALIFIERS.get(family_id)
+    if tag is None:
+        raise ValueError(f"{family_id}: footprint {root} has no vendor qualifier")
+    return f"{base}_{tag}"
+
+
 def xls_footprint_columns(library_path: str, fp_root: str, family_id: str) -> list:
     """Return the six .xls cells (``Library Path 1, Footprint 1,
     Library Path 2, Footprint 2, Library Path 3, Footprint 3``) for a
@@ -292,7 +331,8 @@ def xls_footprint_columns(library_path: str, fp_root: str, family_id: str) -> li
     with all three slots populated; partial configs (user disabled
     M, say) leave slot 3 blank.
     """
-    return _config.footprint_columns(library_path, fp_root, density_codes(family_id))
+    return _config.footprint_columns(library_path, footprint_root(fp_root, family_id),
+                                     density_codes(family_id))
 
 
 def expand_footprint_rows(
@@ -320,8 +360,20 @@ def expand_footprint_rows(
     """
     densities = density_codes(family_id)
     out: list = []
+    geometry_by_root: dict = {}
     for b in bodies:
-        root = b["root"]
+        # Rename per the family's footprint naming option. Generic names
+        # must not fold two different geometries of one family together.
+        root = footprint_root(b["root"], family_id)
+        geometry = {k: b.get(k) for k in ("kind", "bodyMm", "landPatternMm", "model")}
+        if root in geometry_by_root:
+            if geometry_by_root[root] != geometry:
+                raise ValueError(
+                    f"{family_id}: generic footprint name {root} would merge two different "
+                    f"footprints; use vendor-specific footprint names for this family"
+                )
+            continue
+        geometry_by_root[root] = geometry
         kind = b["kind"]
         note = b["drawingNote"]
         body_mm = b["bodyMm"]

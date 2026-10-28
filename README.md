@@ -116,6 +116,8 @@ where:
 - `H`: nominal component height in 0.01 mm units. The value is encoded by formatting the height with two decimal places, removing the decimal point, and removing leading zeros before the decimal point only. Therefore `0.05 mm -> X05`, `0.65 mm -> X65`, `1.00 mm -> X100`, and `2.50 mm -> X250`.
 - `D`: IPC density-level suffix: `L` for least, `N` for nominal, or `M` for most.
 
+By default each family uses **vendor-specific** names, which add a family tag before the density letter (`RESC0603X26_CRCWL`, `RESC1005X35_ERJN`). Then no two families ever share a footprint, so each part gets exactly the geometry its own datasheet implies. A family can instead use **generic** IPC-7351B names (`RESC0603X26L`), set under _Footprint names_ on its card in the configurator's Libraries tab. Generic names can be shared with other families; when two families emit the same name, the house library keeps the geometry from the family ranked higher on the Priorities tab, which lists only the families whose names actually collide in the current build.
+
 ## Structure
 
 Every vendor `.xls` workbook in this repository follows the same column schema, captured canonically in [`resistor_template.xlsx`](resistor_template.xlsx). Columns are split into five groups; the first two groups carry the human-facing identity of the part, the third carries electrical parameters used for filtering / BOM, and the last two tell Altium where to fetch the schematic symbol and PCB footprints when the part is placed. Example values below show one row for `ERJ-XGNF10R0`:

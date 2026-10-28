@@ -96,6 +96,10 @@ not be described as equivalent solely because their capacitance matches.
 New footprint roots may include an uppercase qualifier before the final density
 letter: `RESC6332X64_RCPWN`. This prevents different manufacturers or terminal
 styles with similar body sizes from being merged into the wrong footprint.
+`_common.footprint_root` applies each family's `footprint_names` option when a
+footprint is named: vendor-specific (the default) keeps the qualifier or adds the
+family tag from `FAMILY_QUALIFIERS`; generic drops it, and fails if that would
+merge two different geometries from one family.
 New entries use nominal length/width and maximum height. The legacy schema field
 is still named `heightNominal`; its conservative use is recorded in `drawingNote`.
 

@@ -11,6 +11,25 @@
 	"available_sizes": ["0201", "0402", "0603", "0805", "1206", "1210"],
 	"options": [
 		{
+			"id": "footprint_names",
+			"label": "Footprint names",
+			"help": "Vendor-specific names keep this family's footprints separate from every other family. Generic IPC-7351B names can be shared with other families; the Priorities tab chooses which family's geometry wins when names overlap.",
+			"control": {
+				"kind": "select",
+				"default_value": "vendor",
+				"choices": [
+					{
+						"id": "vendor",
+						"label": "Vendor-specific, e.g. CAPC1608X100_GCMN"
+					},
+					{
+						"id": "generic",
+						"label": "Generic IPC-7351B, e.g. CAPC1608X100N"
+					}
+				]
+			}
+		},
+		{
 			"id": "min_voltage",
 			"label": "Minimum voltage rating",
 			"help": "Filter out parts rated below this voltage.",

@@ -99,6 +99,15 @@ def vendor_key_for(family_id: str) -> str:
     return _FAMILY_TO_VENDOR_KEY.get(family_id, family_id)
 
 
+def family_id_for(vendor_key: str) -> str:
+    """Inverse of :func:`vendor_key_for` (``murata-ferrite`` ->
+    ``murata-ferrites``); identity for every other vendor key."""
+    for family_id, key in _FAMILY_TO_VENDOR_KEY.items():
+        if key == vendor_key:
+            return family_id
+    return vendor_key
+
+
 # ---------------------------------------------------------------------------
 # Settings dataclasses (1:1 mirror of `src/lib/schema.ts::settingsSchema`)
 # ---------------------------------------------------------------------------
