@@ -70,6 +70,13 @@ catalog lists every grade for every value, so 10 kOhm 1% appears as both
 `CRCW020110K0FKED` and `CRCW020110K0FNED`. A unit test checks that the catalog
 holds every grade/value the decoder accepts for each size's reel.
 
+The CRCW importer's `select` applies two Libraries-tab options before writing:
+`tcr_options` (K = ±100, N = ±200, X = -200/+400 ppm; all by default) and
+`lowest_tcr_only`, which keeps the tightest ticked TCR per size, value, tolerance
+and reel (8,627 parts with every TCR ticked). Each row lists the size's other
+datasheet reels in the opt-in `alternates` columns (MFG/MPN 2-5): 0603 `EA` carries
+`EC`, `ED`, `EE` and `EI`; 1218 and 2010 have only one reel.
+
 Every workbook follows the website's database standard (`/docs/database-standards/`),
 written through `vendors/_standard.py`: standard columns first, in order, then any
 extra columns the family enabled. These importers can add Power (resistors),

@@ -18,7 +18,7 @@ E24 = (10,11,12,13,15,16,18,20,22,24,27,30,33,36,39,43,47,51,56,62,68,75,82,91)
 
 def decode(row, family):
     mpn = row['mpn']
-    extra, construction = {}, ''
+    extra, construction, alternates = {}, '', ()
     if family == 'vishay-crcw':
         m = re.fullmatch(r'CRCW(0201|0402|0603|0805|1206|1210|1218|2010|2512)([0-9RKM]{4})([FJ][KNX]|Z0)(E[A-K])', mpn)
         if not m:
@@ -63,6 +63,8 @@ def decode(row, family):
             features += f"; jumper <={50 if size == '0201' else 20}mOhm; Imax=" + imax
             conditions = 'Jumper current must meet datasheet thermal conditions'
         qualifier, construction = 'CRCW', 'THICK FILM'
+        # Same part on the size's other datasheet reels.
+        alternates = tuple(mpn[:-2] + other for other in packs if other != packing)
         extra['model'] = {'type': 'wide-bottom', 'topTerminalLengthMm': top}
     elif family == 'vishay-rcs':
         m = re.fullmatch(r'RCS(0402|0603|0805|1206)([0-9RKM]{4})(FK|DK|JN|Z0)(E[A-C]|E[D-I])', mpn)
@@ -144,4 +146,4 @@ def decode(row, family):
     geom = body('RESC',metric,H,qualifier,L,W,T,source+'; maximum height; nominal L/W and terminals',**extra)
     return Part(mpn,'Vishay',size,'R',resistance(value),tol,tcr,temp,qual,
                 number(voltage)+'V' if voltage != '' else '',number(power)+'W' if power != '' else '',
-                features,conditions,source,geom,construction)
+                features,conditions,source,geom,construction,alternates)

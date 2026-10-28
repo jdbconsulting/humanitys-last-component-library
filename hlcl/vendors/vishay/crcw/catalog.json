@@ -30,6 +30,39 @@
 			}
 		},
 		{
+			"id": "tcr_options",
+			"label": "TCR options",
+			"help": "Temperature-coefficient grades to include. ±200 ppm/K also covers every 5% part in 0402-2512; −200/+400 ppm/K exists only below 10 Ω in 0201.",
+			"control": {
+				"kind": "multiselect",
+				"presentation": "checkboxes",
+				"default_value": ["K", "N", "X"],
+				"choices": [
+					{
+						"id": "K",
+						"label": "±100 ppm/K (FK)"
+					},
+					{
+						"id": "N",
+						"label": "±200 ppm/K (FN, JN)"
+					},
+					{
+						"id": "X",
+						"label": "−200/+400 ppm/K (FX, JX)"
+					}
+				]
+			}
+		},
+		{
+			"id": "lowest_tcr_only",
+			"label": "Lowest TCR only",
+			"help": "Keep only the lowest-TCR part for each value and tolerance, among the TCR options above. Off lists every TCR the datasheets offer.",
+			"control": {
+				"kind": "toggle",
+				"default_value": false
+			}
+		},
+		{
 			"id": "extra_parameters",
 			"label": "Extra / non-standard parameters",
 			"help": "Columns outside the database standard. Ticked columns are added after the standard ones.",
@@ -52,6 +85,10 @@
 					{
 						"id": "datasheet",
 						"label": "Datasheet link"
+					},
+					{
+						"id": "alternates",
+						"label": "Alternate reels (MFG/MPN 2-5)"
 					}
 				],
 				"default_value": []

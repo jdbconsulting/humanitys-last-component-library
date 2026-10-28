@@ -79,6 +79,7 @@ class Part:
     datasheet: str
     geometry: dict = field(compare=False)
     construction: str = ""  # resistor film type (THICK FILM) or capacitor dielectric (X7R)
+    alternates: tuple = ()  # other orderable MPNs (e.g. reel codes) -> MFG/MPN 2-5
 
     def record(self, family):
         """Database-standard row (see _standard) plus the supported extra columns."""
@@ -100,6 +101,9 @@ class Part:
             "Tcr": self.tcr, "Tr": self.temperature, "Power": self.power,
             "Features": self.features, "Rating Conditions": self.conditions,
             "Datasheet": self.datasheet,
+            **{column: value for n in range(2, 6) for column, value in (
+                (f"MFG {n}", self.manufacturer.upper() if n - 2 < len(self.alternates) else ""),
+                (f"MPN {n}", self.alternates[n - 2] if n - 2 < len(self.alternates) else ""))},
         }
 
 
@@ -121,8 +125,11 @@ def read_csv(path):
         return list(csv.DictReader(stream))
 
 
-def run(family, sheet_name, parts):
-    """Validate first, then emit an offline workbook, DbLib and footprint set."""
+def run(family, sheet_name, parts, extras=()):
+    """Validate first, then emit an offline workbook, DbLib and footprint set.
+
+    ``extras`` adds family-specific supported extra columns (e.g. alternates).
+    """
     enabled = _common.enabled_sizes(family)
     seen, geometries, accepted = set(), {}, []
     for part in parts:
@@ -147,7 +154,7 @@ def run(family, sheet_name, parts):
     wb = xlwt.Workbook()
     _standard.write_sheet(wb.add_sheet(sheet_name), kind, family,
                           [p.record(family) for p in sorted(accepted, key=lambda p: p.mpn)],
-                          SUPPORTED_EXTRAS[kind])
+                          SUPPORTED_EXTRAS[kind] + tuple(extras))
     output = ROOT / "build" / "output"
     output.mkdir(parents=True, exist_ok=True)
     wb.save(str(output / f"{family}.xls"))
@@ -157,7 +164,8 @@ def run(family, sheet_name, parts):
     print(f"{family}: {len(accepted)} parts, {len(footprints)} footprints")
 
 
-def csv_main(family, sheet, default_input, decoder):
+def csv_main(family, sheet, default_input, decoder, select=None, extras=()):
+    """``select`` optionally narrows the decoded parts (family options)."""
     parser = argparse.ArgumentParser(description=f"Build {family} from a verified offline catalog")
     parser.add_argument("--input", default=str(default_input))
     args = parser.parse_args()
@@ -169,4 +177,4 @@ def csv_main(family, sheet, default_input, decoder):
                 parts.append(part)
         except (ValueError, KeyError, ArithmeticError) as exc:
             raise ValueError(f"{args.input}:{line}: {exc}") from exc
-    run(family, sheet, parts)
+    run(family, sheet, select(parts) if select else parts, extras)

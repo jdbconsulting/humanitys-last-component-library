@@ -162,6 +162,35 @@ class PassiveCatalogTests(unittest.TestCase):
                         missing.append(mpn)
         self.assertEqual(missing, [])
 
+    def test_crcw_tcr_options_and_reel_alternates(self):
+        importer = load_module(str(ROOT/'hlcl/vendors/vishay/crcw/importer.py'))
+        parts = [importer.decode(r) for r in catalog('vishay-crcw')]
+
+        def chosen(**options):
+            raw = json.loads((ROOT/'hlcl/factory-defaults.json').read_text())
+            raw['families']['vishay-crcw']['options'].update(options)
+            with patch.object(importer._config, 'current', return_value=importer._config.from_dict(raw)):
+                return {p.mpn for p in importer.select(parts)}
+
+        self.assertEqual(len(chosen()), len(parts))  # defaults: every TCR
+        lowest = chosen(lowest_tcr_only=True)
+        self.assertEqual(len(lowest), 8627)  # one TCR per value, tolerance and reel
+        self.assertIn('CRCW020110K0FKED', lowest)
+        self.assertNotIn('CRCW020110K0FNED', lowest)
+        self.assertIn('CRCW020110R0FNED', lowest)  # FN is the tightest 1% grade at 10 ohm
+        only_100 = chosen(tcr_options=['K'])
+        self.assertTrue(all(m[13] in 'K0' for m in only_100))
+        self.assertIn('CRCW06030000Z0EA', only_100)  # jumpers have no TCR
+        self.assertFalse(any(m[12:14] == 'JN' for m in chosen(tcr_options=['K', 'X'])))
+
+        record = resistor({'mpn':'CRCW06031K00FKEA'},'vishay-crcw').record('vishay-crcw')
+        self.assertEqual([record[f'MPN {n}'] for n in range(2, 6)],
+                         ['CRCW06031K00FKEC','CRCW06031K00FKED','CRCW06031K00FKEE','CRCW06031K00FKEI'])
+        self.assertEqual(record['MFG 2'], 'VISHAY')
+        self.assertEqual(_standard.cells('R', ['alternates'], record)[-8:-6], ['VISHAY','CRCW06031K00FKEC'])
+        record = resistor({'mpn':'CRCW1218100RFKEK'},'vishay-crcw').record('vishay-crcw')
+        self.assertEqual((record['MFG 2'], record['MPN 2']), ('', ''))  # 1218 has one reel
+
     def test_crcw_rows_follow_the_database_standard(self):
         def row(mpn):
             with patch.object(_common,'density_codes',return_value=('L','N','M')):

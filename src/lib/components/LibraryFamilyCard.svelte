@@ -118,7 +118,13 @@
 
 					{#if opt.control.kind === 'toggle'}
 						<div class="mt-2">
-							<Toggle checked={fam.options[opt.id] === true} label="Enabled" size="sm" />
+							<Toggle
+								bind:checked={
+									() => fam.options[opt.id] === true, (value) => (fam.options[opt.id] = value)
+								}
+								label="Enabled"
+								size="sm"
+							/>
 						</div>
 					{:else if opt.control.kind === 'select'}
 						<select
