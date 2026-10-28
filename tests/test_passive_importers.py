@@ -51,6 +51,8 @@ class PassiveCatalogTests(unittest.TestCase):
         cases = [
             ('vishay-crcw','CRCW02011K00FKED','1k','1%','0.05W'),
             ('vishay-crcw','CRCW020110R0FNED','10','1%','0.05W'),
+            ('vishay-crcw','CRCW020110K0FNED','10k','1%','0.05W'),
+            ('vishay-crcw','CRCW04021R00FNED','1','1%','0.063W'),
             ('vishay-crcw','CRCW0603562RFKEA','562','1%','0.1W'),
             ('vishay-crcw','CRCW04024K70JNED','4.7k','5%','0.063W'),
             ('vishay-crcw','CRCW121810K0FKEK','10k','1%','1W'),
@@ -142,6 +144,23 @@ class PassiveCatalogTests(unittest.TestCase):
             g = resistor({'mpn':f'CRCW{size}10K0FK{pack}'},'vishay-crcw').geometry
             self.assertEqual((g['root'],g['bodyMm']['terminalLengthNominal'],
                               g['model']['topTerminalLengthMm']),(root,bottom,top))
+
+    def test_crcw_catalog_lists_every_grade_the_decoder_accepts(self):
+        rows = {r['mpn'] for r in catalog('vishay-crcw')}
+        reels = {m[4:8]: m[14:] for m in rows}
+        codes = {m[8:12] for m in rows}
+        missing = []
+        for size, reel in reels.items():
+            for code in codes:
+                for grade in ('FK','FN','FX','JN','JX','Z0'):
+                    mpn = f'CRCW{size}{code}{grade}{reel}'
+                    try:
+                        resistor({'mpn':mpn},'vishay-crcw')
+                    except ValueError:
+                        continue
+                    if mpn not in rows:
+                        missing.append(mpn)
+        self.assertEqual(missing, [])
 
     def test_crcw_rows_follow_the_database_standard(self):
         def row(mpn):

@@ -7,19 +7,19 @@ land patterns, embedded STEP models, and PcbLib.
 
 ## Initial catalog scope
 
-| Build target          | Initial scope                                                                                                                                                            |  Rows |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----: |
-| `murata-gcd`          | Active GCD188/GCD21B PIM catalog; 0603 paper D and 0805 embossed L packaging; X7R plus one X7S entry                                                                     |   109 |
-| `murata-krm`          | KRM55QR72A106KH01, L/K packaging                                                                                                                                         |     2 |
-| `kemet-open-mode`     | Verified automotive open-mode X7R codes, 0603/1210                                                                                                                       |     2 |
-| `kemet-esd-c0g`       | Verified automotive C0G ESD code, 0805                                                                                                                                   |     1 |
-| `kemet-x7r`           | Verified commercial X7R codes, 0402/0805                                                                                                                                 |     2 |
-| `tdk-c`               | Verified commercial X7R C1005/C3225 codes, 0402/1210                                                                                                                     |     2 |
-| `vishay-crcw`         | 1% E24/E96 and 5% E24 at the lowest-TCR grade per value, 1 ohm–10 Mohm (1218: 2.2 Mohm), plus jumpers; 0201–2512; one valid reel format per size; database-standard rows | 8,627 |
-| `vishay-rcs`          | E24/E96, 1 ohm–10 Mohm, 1%/100 ppm, plus jumpers; 0402–1206; one valid reel format per size                                                                              | 3,200 |
-| `vishay-rcp`          | Two verified wide-terminal codes, 0603/2512; decoder also supports reviewed 1206 geometry                                                                                |     2 |
-| `vishay-mc-precision` | MC version 0, 0.1%/25 ppm; E24/E96 subset of the published E24/E192 range; 0402–1206                                                                                     | 1,882 |
-| `vishay-mc-at`        | MC version M, 0.1%/25 ppm; E24/E96 subset of the published E24/E192 range; 0402–1206                                                                                     | 2,226 |
+| Build target          | Initial scope                                                                                                                                                                 |   Rows |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -----: |
+| `murata-gcd`          | Active GCD188/GCD21B PIM catalog; 0603 paper D and 0805 embossed L packaging; X7R plus one X7S entry                                                                          |    109 |
+| `murata-krm`          | KRM55QR72A106KH01, L/K packaging                                                                                                                                              |      2 |
+| `kemet-open-mode`     | Verified automotive open-mode X7R codes, 0603/1210                                                                                                                            |      2 |
+| `kemet-esd-c0g`       | Verified automotive C0G ESD code, 0805                                                                                                                                        |      1 |
+| `kemet-x7r`           | Verified commercial X7R codes, 0402/0805                                                                                                                                      |      2 |
+| `tdk-c`               | Verified commercial X7R C1005/C3225 codes, 0402/1210                                                                                                                          |      2 |
+| `vishay-crcw`         | 1% E24/E96 and 5% E24 in every TCR grade the datasheets list, 1 ohm–10 Mohm (1218: 2.2 Mohm), plus jumpers; 0201–2512; one valid reel format per size; database-standard rows | 10,034 |
+| `vishay-rcs`          | E24/E96, 1 ohm–10 Mohm, 1%/100 ppm, plus jumpers; 0402–1206; one valid reel format per size                                                                                   |  3,200 |
+| `vishay-rcp`          | Two verified wide-terminal codes, 0603/2512; decoder also supports reviewed 1206 geometry                                                                                     |      2 |
+| `vishay-mc-precision` | MC version 0, 0.1%/25 ppm; E24/E96 subset of the published E24/E192 range; 0402–1206                                                                                          |  1,882 |
+| `vishay-mc-at`        | MC version M, 0.1%/25 ppm; E24/E96 subset of the published E24/E192 range; 0402–1206                                                                                          |  2,226 |
 
 CRCW, RCS and MC lists describe combinations permitted by their ordering tables;
 they are **not distributor stock or availability assertions**. Other new
@@ -59,15 +59,16 @@ and the delivery specification before making that substitution.
 
 CRCW 0402–0805 use the **standard operation mode** P70/Umax (0.063 W/50 V,
 0.1 W/75 V, 0.125 W/150 V). The datasheet's headline table quotes the extended
-mode, which permits twice the 1000 h drift. The decoder accepts the 1%/200 ppm
-`FN` grade only for 1–9.76 ohm; the default catalog omits it because `FK` covers
-the same values. CRCW and RCS lands use the bottom terminal T1; the top terminal
+mode, which permits twice the 1000 h drift. The 1%/200 ppm `FN` grade exists only
+for 1–9.76 ohm; the catalog lists it alongside `FK` for those values. CRCW and RCS lands use the bottom terminal T1; the top terminal
 T2 only shapes the model. CRCW 1218 and 2010 add those sizes to the global case-size list.
 
 CRCW 0201 comes from a separate commercial datasheet without AEC-Q200, so its
-`Qual` is blank. No single 0201 grade spans 1 ohm–10 Mohm. The catalog uses the
-lowest TCR offered for each value: `FK` for 47 ohm–1 Mohm, `FN`/`JN` for
-10 ohm–10 Mohm otherwise, and `FX`/`JX` (-200/+400 ppm) below 10 ohm.
+`Qual` is blank. Its grades overlap: `FK` (100 ppm) covers 47 ohm–1 Mohm, `FN`/`JN`
+(200 ppm) 10 ohm–10 Mohm, and `FX`/`JX` (-200/+400 ppm) values below 10 ohm. The
+catalog lists every grade for every value, so 10 kOhm 1% appears as both
+`CRCW020110K0FKED` and `CRCW020110K0FNED`. A unit test checks that the catalog
+holds every grade/value the decoder accepts for each size's reel.
 
 Every workbook follows the website's database standard (`/docs/database-standards/`),
 written through `vendors/_standard.py`: standard columns first, in order, then any

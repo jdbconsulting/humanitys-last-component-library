@@ -27,7 +27,7 @@
 
 	// Full default build: hlcl/build_stats.py counts workbook rows and merged
 	// footprints (including L/N/M density variants); the catalog has 28 families.
-	const heroStats = ['67,692 components!', '591 footprints', '28 families'] as const;
+	const heroStats = ['69,099 components!', '591 footprints', '28 families'] as const;
 
 	// Hand-curated family list for the marketing grid below. Kept in
 	// sync with the on-disk catalog (`hlcl/vendors/<mfg>/<family>/catalog.json`,
