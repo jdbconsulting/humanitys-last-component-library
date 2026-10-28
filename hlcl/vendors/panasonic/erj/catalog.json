@@ -9,5 +9,22 @@
 	"subtype_order": 10,
 	"sort_order": 10,
 	"available_sizes": ["01005", "0201", "0402", "0603", "0805"],
-	"options": []
+	"options": [
+		{
+			"id": "extra_parameters",
+			"label": "Extra / non-standard parameters",
+			"help": "Columns outside the database standard. Ticked columns are added after the standard ones.",
+			"control": {
+				"kind": "multiselect",
+				"presentation": "checkboxes",
+				"choices": [
+					{
+						"id": "power",
+						"label": "Power rating"
+					}
+				],
+				"default_value": []
+			}
+		}
+	]
 }

@@ -1,28 +1,28 @@
 <script lang="ts">
 	import JSZip from 'jszip';
 	import { tick } from 'svelte';
+	import { autoBuild } from '$lib/auto-build.svelte';
 	import { appState } from '$lib/state.svelte';
 	import { consoleLog } from '$lib/console.svelte';
-	import {
-		cleanBuild,
-		computeBuildStats,
-		listBuildOutputs,
-		readOutputBytes,
-		runBuild,
-		type BuildOutputFile
-	} from '$lib/hlcl-runner';
+	import { readOutputBytes, type BuildOutputFile } from '$lib/hlcl-runner';
 	import { saveBlobAs } from '$lib/texapi';
 	import { sanitizeConfigFilenameStem } from '$lib/config-filename';
 	import SectionHeader from '../SectionHeader.svelte';
 	import WorkbookViewer from '../WorkbookViewer.svelte';
 
-	type BuildStatus = 'idle' | 'running' | 'success' | 'error';
-	let buildStatus = $state<BuildStatus>('idle');
-	let buildOutputs = $state<BuildOutputFile[]>([]);
-	let buildError = $state<string | null>(null);
+	// Builds run in the background (see `auto-build.svelte.ts`); this tab
+	// shows their status and the artifacts of the last completed build.
+	const buildOutputs = $derived(autoBuild.outputs);
+	const liveConfig = $derived(appState.snapshotConfig());
+	const upToDate = $derived(autoBuild.isCurrent(liveConfig));
 	let zipping = $state(false);
 	let viewingPath = $state<string | null>(null);
 	let viewerAnchor = $state<HTMLElement | undefined>();
+
+	// Close the viewer if a rebuild dropped the workbook it was showing.
+	$effect(() => {
+		if (viewingPath && !buildOutputs.some((f) => f.path === viewingPath)) viewingPath = null;
+	});
 
 	async function viewWorkbook(file: BuildOutputFile) {
 		viewingPath = file.path;
@@ -30,48 +30,17 @@
 		viewerAnchor?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 	}
 
-	async function onRunBuild() {
-		if (buildStatus === 'running') return;
-		buildStatus = 'running';
-		buildError = null;
-		buildOutputs = [];
-		viewingPath = null;
-		const t0 = Date.now();
-		// Snapshot the config we're handing to the build; we'll cache
-		// the stats against THIS exact config (not the live one, which
-		// the user might already be editing in another tab while the
-		// build is running).
-		const builtConfig = appState.snapshotConfig();
-		try {
-			await cleanBuild();
-			await runBuild(builtConfig);
-			buildOutputs = await listBuildOutputs();
-			buildStatus = 'success';
-			const dt = ((Date.now() - t0) / 1000).toFixed(1);
-			consoleLog.system(`Build finished in ${dt}s. Produced ${buildOutputs.length} artifact(s).`);
-
-			// Aggregate library-stats for the configure-page banner.
-			// Failure here is non-fatal — the build itself succeeded —
-			// so we surface it as an error log line and leave any prior
-			// cached stats in place (they'll still flip to "stale" via
-			// the config-hash check).
-			try {
-				const stats = await computeBuildStats();
-				appState.setBuildStats(stats, builtConfig);
-				consoleLog.system(
-					`Library stats: ${stats.components.toLocaleString()} components · ` +
-						`${stats.unique_footprints.toLocaleString()} unique footprints.`
-				);
-			} catch (err) {
-				const msg = err instanceof Error ? err.message : String(err);
-				consoleLog.error(`Library-stats aggregation failed: ${msg}`);
-			}
-		} catch (err) {
-			buildError = err instanceof Error ? err.message : String(err);
-			buildStatus = 'error';
-			consoleLog.error(`Build failed: ${buildError}`);
-		}
-	}
+	const status = $derived.by(() => {
+		if (autoBuild.running) return { tone: 'amber', label: 'Building…' };
+		if (autoBuild.queuedHash) return { tone: 'amber', label: 'Rebuild queued' };
+		if (autoBuild.failedHash) return { tone: 'rose', label: 'Build failed' };
+		if (upToDate)
+			return {
+				tone: 'emerald',
+				label: `Up to date · ${buildOutputs.length} artifact${buildOutputs.length === 1 ? '' : 's'}`
+			};
+		return { tone: 'ink', label: appState.ui.auto_build ? 'Waiting…' : 'Out of date' };
+	});
 
 	function safeConfigName(): string {
 		return sanitizeConfigFilenameStem(appState.ui.config_name || '');
@@ -107,13 +76,13 @@
 	}
 
 	async function downloadZip() {
-		if (zipping || buildOutputs.length === 0) return;
+		if (zipping || buildOutputs.length === 0 || !upToDate) return;
 		zipping = true;
 		try {
 			const zip = new JSZip();
-			// Embed the canonical BuildConfig that produced these artifacts so
-			// recipients can reproduce the run via the (future) CLI.
-			zip.file('build-config.json', JSON.stringify(appState.snapshotConfig(), null, 2));
+			// Embed the BuildConfig that produced these artifacts so
+			// recipients can reproduce the run via the CLI.
+			zip.file('build-config.json', JSON.stringify(autoBuild.builtConfig, null, 2));
 			for (const f of buildOutputs) {
 				const bytes = await readOutputBytes(f.path);
 				zip.file(f.path, bytes);
@@ -179,7 +148,10 @@
 	});
 </script>
 
-<SectionHeader title="Generate &amp; download" description="Run the build in your browser." />
+<SectionHeader
+	title="Generate &amp; download"
+	description="The library rebuilds in your browser whenever settings change."
+/>
 
 <div class="mt-6 grid gap-6 lg:grid-cols-3">
 	<div class="space-y-6 lg:col-span-2">
@@ -189,85 +161,65 @@
 					<h3 class="text-sm font-semibold tracking-wider text-navy-700 uppercase">Build</h3>
 					<p class="mt-1 text-xs text-ink-500">
 						Runs <code class="rounded bg-ink-100 px-1 py-0.5 font-mono">build.build_all()</code>
-						against the source tree at
-						<code class="rounded bg-ink-100 px-1 py-0.5 font-mono">/hlcl</code>
-						in Pyodide. The first run downloads ~370&nbsp;KB of build inputs and installs
-						<code class="rounded bg-ink-100 px-1 py-0.5 font-mono">xlwt</code> via micropip; later runs
-						reuse the mounted tree.
+						in a background Pyodide worker, so the page stays responsive. Each change rebuilds once your
+						edits settle; changes made mid-build queue one follow-up build. The first build downloads
+						Pyodide and the build inputs.
 					</p>
 				</div>
 				<span
 					class={[
-						'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold',
-						buildStatus === 'success'
-							? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 ring-inset'
-							: buildStatus === 'error'
-								? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200 ring-inset'
-								: buildStatus === 'running'
-									? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200 ring-inset'
-									: 'bg-ink-100 text-ink-600'
+						'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset',
+						{
+							emerald: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+							rose: 'bg-rose-50 text-rose-700 ring-rose-200',
+							amber: 'bg-amber-50 text-amber-700 ring-amber-200',
+							ink: 'bg-ink-100 text-ink-600 ring-ink-200'
+						}[status.tone]
 					]}
 				>
 					<span
 						class={[
 							'h-1.5 w-1.5 rounded-full',
-							buildStatus === 'success'
-								? 'bg-emerald-500'
-								: buildStatus === 'error'
-									? 'bg-rose-500'
-									: buildStatus === 'running'
-										? 'animate-pulse bg-amber-500'
-										: 'bg-ink-400'
+							{
+								emerald: 'bg-emerald-500',
+								rose: 'bg-rose-500',
+								amber: 'animate-pulse bg-amber-500',
+								ink: 'bg-ink-400'
+							}[status.tone]
 						]}
 					></span>
-					{buildStatus === 'idle'
-						? 'Ready'
-						: buildStatus === 'running'
-							? 'Building…'
-							: buildStatus === 'success'
-								? `${buildOutputs.length} artifact${buildOutputs.length === 1 ? '' : 's'}`
-								: 'Build failed'}
+					{status.label}
 				</span>
 			</div>
 
 			<div class="mt-4 flex flex-wrap items-center gap-3">
-				<button
-					type="button"
-					onclick={onRunBuild}
-					disabled={buildStatus === 'running' || summary.enabled.length === 0}
-					class="inline-flex items-center gap-2 rounded-md bg-navy-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-navy-800 disabled:cursor-not-allowed disabled:opacity-50"
-				>
-					{#if buildStatus === 'running'}
-						<svg
-							class="h-4 w-4 animate-spin"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-						>
-							<path
-								d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"
-							/>
-						</svg>
-						Building in Pyodide…
-					{:else}
-						<svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-							<path
-								fill-rule="evenodd"
-								d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7.5a.5.5 0 01.8-.4l4 2.5a.5.5 0 010 .8l-4 2.5a.5.5 0 01-.8-.4v-5z"
-								clip-rule="evenodd"
-							/>
-						</svg>
-						Run build
-					{/if}
-				</button>
+				<label class="inline-flex items-center gap-2 text-sm text-ink-700">
+					<input
+						type="checkbox"
+						class="h-4 w-4 rounded border-ink-300 text-navy-700 focus:ring-navy-500"
+						bind:checked={appState.ui.auto_build}
+					/>
+					Rebuild automatically
+				</label>
 
-				{#if buildStatus === 'success' && buildOutputs.length > 0}
+				{#if !appState.ui.auto_build || autoBuild.failedHash}
+					<button
+						type="button"
+						onclick={() => autoBuild.buildNow(appState.snapshotConfig())}
+						disabled={autoBuild.running || upToDate}
+						class="inline-flex items-center gap-2 rounded-md bg-navy-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-navy-800 disabled:cursor-not-allowed disabled:opacity-50"
+					>
+						{autoBuild.failedHash ? 'Retry build' : 'Build now'}
+					</button>
+				{/if}
+
+				{#if buildOutputs.length > 0}
 					<button
 						type="button"
 						onclick={downloadZip}
-						disabled={zipping}
-						class="inline-flex items-center gap-2 rounded-md bg-accent-500 px-4 py-2 text-sm font-semibold text-navy-950 shadow-sm transition hover:bg-accent-400 disabled:cursor-wait disabled:opacity-60"
+						disabled={zipping || !upToDate}
+						title={upToDate ? undefined : 'Available once the build matches your current settings'}
+						class="inline-flex items-center gap-2 rounded-md bg-accent-500 px-4 py-2 text-sm font-semibold text-navy-950 shadow-sm transition hover:bg-accent-400 disabled:cursor-not-allowed disabled:opacity-60"
 					>
 						{#if zipping}
 							Zipping…
@@ -288,12 +240,19 @@
 					>
 				{/if}
 
-				{#if buildError}
-					<span class="text-xs text-rose-600">{buildError}</span>
+				{#if autoBuild.error}
+					<span class="text-xs text-rose-600">{autoBuild.error}</span>
 				{/if}
 			</div>
 
-			{#if buildStatus === 'success' && buildOutputs.length > 0}
+			{#if buildOutputs.length > 0 && !upToDate}
+				<p class="mt-3 text-xs text-amber-700">
+					These artifacts are from the previous build. Downloads unlock when the build matches your
+					current settings.
+				</p>
+			{/if}
+
+			{#if buildOutputs.length > 0}
 				<div class="mt-5 border-t border-ink-200 pt-4">
 					<div class="flex items-baseline justify-between">
 						<h4 class="text-xs font-semibold tracking-wider text-navy-700 uppercase">
@@ -444,6 +403,10 @@
 
 {#if viewingPath}
 	<div bind:this={viewerAnchor} class="mt-6 scroll-mt-24">
-		<WorkbookViewer path={viewingPath} onclose={() => (viewingPath = null)} />
+		<WorkbookViewer
+			path={viewingPath}
+			revision={autoBuild.revision}
+			onclose={() => (viewingPath = null)}
+		/>
 	</div>
 {/if}

@@ -1,7 +1,11 @@
 <script lang="ts">
 	import { readWorkbook, type WorkbookSheet } from '$lib/hlcl-runner';
 
-	let { path, onclose }: { path: string; onclose: () => void } = $props();
+	let {
+		path,
+		revision = 0,
+		onclose
+	}: { path: string; revision?: number; onclose: () => void } = $props();
 
 	const PAGE_SIZE = 50;
 
@@ -13,8 +17,10 @@
 	let query = $state('');
 	let pageIndex = $state(0);
 
+	// Reload when the workbook changes or a background rebuild replaces it.
 	$effect(() => {
 		const target = path;
+		void revision;
 		loading = true;
 		error = null;
 		sheets = [];

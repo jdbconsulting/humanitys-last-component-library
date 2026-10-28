@@ -9,5 +9,26 @@
 	"subtype_order": 20,
 	"sort_order": 20,
 	"available_sizes": ["01005", "0201", "0402", "0603", "0805", "1206", "1210"],
-	"options": []
+	"options": [
+		{
+			"id": "extra_parameters",
+			"label": "Extra / non-standard parameters",
+			"help": "Columns outside the database standard. Ticked columns are added after the standard ones.",
+			"control": {
+				"kind": "multiselect",
+				"presentation": "checkboxes",
+				"choices": [
+					{
+						"id": "features",
+						"label": "Features"
+					},
+					{
+						"id": "alternates",
+						"label": "Alternate MPNs (MFG/MPN 2-5)"
+					}
+				],
+				"default_value": []
+			}
+		}
+	]
 }

@@ -1,121 +1,103 @@
-// Lightweight Pyodide loader. Loads from the official jsdelivr CDN on first use,
-// wires stdout/stderr into the app's reactive console, and caches the runtime so
-// subsequent `runHelloWorld` style calls reuse the same interpreter.
+// Main-thread client for the Pyodide worker (`pyodide.worker.ts`).
 //
-// We import the CDN script via a dynamic <script> tag so the build output
-// doesn't try to resolve `pyodide` as an npm dep. The site stays static.
+// Pyodide loads from the official jsdelivr CDN inside a dedicated worker, so
+// long builds never block the UI. Worker stdout/stderr stream into the app's
+// reactive console. The worker is created lazily on first use and reused.
 
 import { consoleLog } from './console.svelte';
+import type { WorkerMessage, WorkerRequest } from './pyodide.worker';
 
-const PYODIDE_VERSION = '0.28.0';
-const PYODIDE_BASE = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
+type Pending = { resolve: (value: unknown) => void; reject: (err: Error) => void };
 
-/**
- * Subset of Emscripten's MEMFS surface that Pyodide exposes via `pyodide.FS`.
- * Used by the HLCL runner to write the source tarball into the in-memory FS
- * before extraction and to read build artifacts back out.
- */
-export interface PyodideFS {
-	writeFile(path: string, data: Uint8Array | string, opts?: { encoding?: string }): void;
-	readFile(path: string, opts?: { encoding?: 'binary' }): Uint8Array;
-	readFile(path: string, opts: { encoding: 'utf8' }): string;
-	readdir(path: string): string[];
-	mkdir(path: string): void;
-	mkdirTree(path: string): void;
-	stat(path: string): { size: number; mode: number; isFile: () => boolean };
-	analyzePath(path: string): { exists: boolean };
-	rmdir(path: string): void;
-	unlink(path: string): void;
+let worker: Worker | null = null;
+let nextId = 1;
+const pending = new Map<number, Pending>();
+
+// Builds print hundreds of lines in bursts. Applying them to the console
+// together (at most every LOG_FLUSH_MS) keeps that to one render per burst.
+const LOG_FLUSH_MS = 100;
+type LogMessage = Extract<WorkerMessage, { type: 'log' }>;
+let logBuffer: LogMessage[] = [];
+let logTimer: ReturnType<typeof setTimeout> | undefined;
+
+function flushLogs(): void {
+	logTimer = undefined;
+	const batch = logBuffer;
+	logBuffer = [];
+	for (const msg of batch) consoleLog[msg.stream](msg.text);
 }
 
-/** Subset of the Pyodide runtime API surface we actually use. */
-export interface PyodideRuntime {
-	runPython: (code: string) => unknown;
-	runPythonAsync: (code: string) => Promise<unknown>;
-	setStdout: (opts: { batched: (s: string) => void }) => void;
-	setStderr: (opts: { batched: (s: string) => void }) => void;
-	loadPackage: (names: string | string[]) => Promise<void>;
-	version: string;
-	FS: PyodideFS;
+function failAll(message: string): void {
+	for (const p of pending.values()) p.reject(new Error(message));
+	pending.clear();
 }
 
-declare global {
-	interface Window {
-		loadPyodide?: (opts: { indexURL: string }) => Promise<PyodideRuntime>;
-	}
-}
-
-let pyodidePromise: Promise<PyodideRuntime> | null = null;
-let scriptLoaded = false;
-
-function loadCdnScript(): Promise<void> {
-	if (scriptLoaded) return Promise.resolve();
-	if (typeof document === 'undefined')
-		return Promise.reject(new Error('Pyodide requires a browser'));
-
-	return new Promise((resolve, reject) => {
-		const existing = document.querySelector<HTMLScriptElement>(
-			`script[data-pyodide="${PYODIDE_VERSION}"]`
-		);
-		if (existing) {
-			scriptLoaded = true;
-			resolve();
+function getWorker(): Worker {
+	if (worker) return worker;
+	if (typeof Worker === 'undefined') throw new Error('Pyodide requires a browser');
+	const w = new Worker(new URL('./pyodide.worker.ts', import.meta.url), { type: 'module' });
+	w.onmessage = (event: MessageEvent<WorkerMessage>) => {
+		const msg = event.data;
+		if (msg.type === 'log') {
+			logBuffer.push(msg);
+			logTimer ??= setTimeout(flushLogs, LOG_FLUSH_MS);
 			return;
 		}
-		const tag = document.createElement('script');
-		tag.src = `${PYODIDE_BASE}pyodide.js`;
-		tag.async = true;
-		tag.dataset.pyodide = PYODIDE_VERSION;
-		tag.onload = () => {
-			scriptLoaded = true;
-			resolve();
-		};
-		tag.onerror = () => reject(new Error('Failed to load pyodide.js from CDN'));
-		document.head.appendChild(tag);
+		// Results flush pending logs first so output stays in order.
+		if (logTimer !== undefined) {
+			clearTimeout(logTimer);
+			flushLogs();
+		}
+		const p = pending.get(msg.id);
+		if (!p) return;
+		pending.delete(msg.id);
+		if (msg.ok) p.resolve(msg.result);
+		else p.reject(new Error(msg.error));
+	};
+	w.onerror = (event) => {
+		failAll(`Pyodide worker failed: ${event.message || 'unknown error'}`);
+		w.terminate();
+		if (worker === w) worker = null;
+	};
+	worker = w;
+	return w;
+}
+
+/** A request without its id, keeping each op's own fields (distributive). */
+type RequestBody = {
+	[Op in WorkerRequest['op']]: Omit<Extract<WorkerRequest, { op: Op }>, 'id'>;
+}[WorkerRequest['op']];
+
+function call(payload: RequestBody, transfer: Transferable[] = []): Promise<unknown> {
+	return new Promise((resolve, reject) => {
+		const id = nextId++;
+		pending.set(id, { resolve, reject });
+		try {
+			getWorker().postMessage({ ...payload, id }, transfer);
+		} catch (err) {
+			pending.delete(id);
+			reject(err instanceof Error ? err : new Error(String(err)));
+		}
 	});
 }
 
-/**
- * Lazily-construct the Pyodide runtime. Repeated calls return the same instance.
- * Streams stdout/stderr into `consoleLog`.
- */
-export async function getPyodide(): Promise<PyodideRuntime> {
-	if (pyodidePromise) return pyodidePromise;
+/** The Pyodide operations the HLCL runner needs, executed in the worker. */
+export const pyodide = {
+	/** Run Python; resolves to the last expression's value (strings stay strings). */
+	runPython: (code: string) => call({ op: 'runPython', code }),
+	loadPackage: async (names: string[]) => void (await call({ op: 'loadPackage', names })),
+	/** Write a file into MEMFS, creating parent directories. */
+	writeFile: async (path: string, data: Uint8Array | string) =>
+		void (await call(
+			{ op: 'writeFile', path, data },
+			typeof data === 'string' ? [] : [data.buffer]
+		)),
+	readFile: async (path: string) => (await call({ op: 'readFile', path })) as Uint8Array
+};
 
-	pyodidePromise = (async () => {
-		consoleLog.system(`Loading Pyodide ${PYODIDE_VERSION} from CDN…`);
-		await loadCdnScript();
-
-		if (!window.loadPyodide) {
-			throw new Error('window.loadPyodide is undefined after script load');
-		}
-
-		const py = await window.loadPyodide({ indexURL: PYODIDE_BASE });
-
-		py.setStdout({
-			batched: (s: string) => {
-				if (s.length > 0) consoleLog.stdout(s);
-			}
-		});
-		py.setStderr({
-			batched: (s: string) => {
-				if (s.length > 0) consoleLog.stderr(s);
-			}
-		});
-
-		consoleLog.system(`Pyodide ${py.version} ready.`);
-		return py;
-	})();
-
-	try {
-		return await pyodidePromise;
-	} catch (err) {
-		pyodidePromise = null;
-		throw err;
-	}
-}
-
-/** Reset the cached runtime — used when the user wants a fresh interpreter. */
+/** Terminate the worker so the next call starts a fresh interpreter. */
 export function resetPyodide(): void {
-	pyodidePromise = null;
+	worker?.terminate();
+	worker = null;
+	failAll('Pyodide worker was reset');
 }

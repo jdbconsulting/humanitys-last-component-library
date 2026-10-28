@@ -11,11 +11,10 @@
  *      so the Python side picks it up via ``build.discover(config_path=…)``
  *      — exactly the same code path as ``python build.py --config <path>``
  *      from the CLI.
- *   3. Running ``build.discover() / build.build_all()`` while yielding to
- *      the JS event loop between targets — Pyodide runs synchronously on
- *      the main thread, so the explicit ``await asyncio.sleep(0)`` after
- *      each target is what actually flushes the buffered stdout to
- *      ``consoleLog`` and lets the UI repaint mid-build. The runner skips
+ *   3. Running ``build.discover() / build.build_all()`` in the Pyodide
+ *      worker (``pyodide.worker.ts``), yielding between targets with
+ *      ``await asyncio.sleep(0)`` so buffered stdout reaches ``consoleLog``
+ *      mid-build. The page stays responsive throughout. The runner skips
  *      every target whose ``cfg.is_target_enabled(...)`` predicate is
  *      false, so disabled families / artifacts cost ~zero time per click.
  *   4. Walking `/hlcl/build/output/` to enumerate the produced artifacts and
@@ -25,7 +24,7 @@
 
 import { base } from '$app/paths';
 import { consoleLog } from './console.svelte';
-import { getPyodide, type PyodideRuntime } from './pyodide';
+import { pyodide as py } from './pyodide';
 import type { BuildConfig } from './schema';
 
 /** Where the Vite plugin emits the build-inputs tarball. */
@@ -91,12 +90,12 @@ let depsInstalled = false;
  * micropip. Idempotent — micropip itself caches downloads, but we also gate
  * on a module-level flag to skip the round-trip on subsequent calls.
  */
-async function installPythonRequirements(py: PyodideRuntime): Promise<void> {
+async function installPythonRequirements(): Promise<void> {
 	if (depsInstalled) return;
 	consoleLog.system(`Installing Python deps: ${PYTHON_REQUIREMENTS.join(', ')}…`);
-	await py.loadPackage('micropip');
+	await py.loadPackage(['micropip']);
 	const reqsJson = JSON.stringify(PYTHON_REQUIREMENTS);
-	await py.runPythonAsync(`
+	await py.runPython(`
 import json, micropip
 reqs = json.loads(${pyStr(reqsJson)})
 await micropip.install(reqs)
@@ -112,9 +111,7 @@ print(f"micropip: installed {', '.join(reqs)}", flush=True)
  */
 export async function mountHlclSources(force = false): Promise<void> {
 	if (sourcesMounted && !force) return;
-	const py = await getPyodide();
-
-	await installPythonRequirements(py);
+	await installPythonRequirements();
 
 	consoleLog.system(`Fetching HLCL build inputs from ${TARBALL_URL}…`);
 	const resp = await fetch(TARBALL_URL);
@@ -126,10 +123,9 @@ export async function mountHlclSources(force = false): Promise<void> {
 		`Got ${(bytes.length / 1024 / 1024).toFixed(2)} MiB tarball; unpacking into ${HLCL_ROOT}/…`
 	);
 
-	if (!py.FS.analyzePath('/tmp').exists) py.FS.mkdir('/tmp');
-	py.FS.writeFile(TARBALL_STAGE, bytes);
+	await py.writeFile(TARBALL_STAGE, bytes);
 
-	await py.runPythonAsync(`
+	await py.runPython(`
 import os, shutil, tarfile, sys
 if os.path.isdir(${pyStr(HLCL_ROOT)}):
     shutil.rmtree(${pyStr(HLCL_ROOT)})
@@ -253,10 +249,9 @@ finally:
  * performed Python-side by ``hlcl/_config.from_dict``; a malformed config
  * surfaces as the rejected ``runPythonAsync`` promise from ``runBuild``.
  */
-async function writeBuildConfig(py: PyodideRuntime, cfg: BuildConfig): Promise<void> {
+async function writeBuildConfig(cfg: BuildConfig): Promise<void> {
 	const json = JSON.stringify(cfg, null, 2);
-	if (!py.FS.analyzePath(HLCL_ROOT).exists) py.FS.mkdir(HLCL_ROOT);
-	py.FS.writeFile(CONFIG_PATH, json);
+	await py.writeFile(CONFIG_PATH, json);
 }
 
 /**
@@ -269,10 +264,9 @@ async function writeBuildConfig(py: PyodideRuntime, cfg: BuildConfig): Promise<v
  */
 export async function runBuild(cfg: BuildConfig): Promise<void> {
 	await mountHlclSources();
-	const py = await getPyodide();
-	await writeBuildConfig(py, cfg);
+	await writeBuildConfig(cfg);
 	consoleLog.system(`Running build with config (${HLCL_ROOT}/build-config.json) …`);
-	await py.runPythonAsync(RUNNER_SOURCE);
+	await py.runPython(RUNNER_SOURCE);
 }
 
 /**
@@ -281,8 +275,7 @@ export async function runBuild(cfg: BuildConfig): Promise<void> {
  * generated artifact for a now-disabled family can't sneak into the output.
  */
 export async function cleanBuild(): Promise<void> {
-	const py = await getPyodide();
-	await py.runPythonAsync(`
+	await py.runPython(`
 import os, shutil
 build_dir = os.path.join(${pyStr(HLCL_ROOT)}, 'build')
 if os.path.isdir(build_dir):
@@ -296,8 +289,7 @@ if os.path.isdir(build_dir):
  * before the first build).
  */
 export async function listBuildOutputs(): Promise<BuildOutputFile[]> {
-	const py = await getPyodide();
-	const result = await py.runPythonAsync(`
+	const result = await py.runPython(`
 import json, os
 root = os.path.join(${pyStr(HLCL_ROOT)}, 'build', 'output')
 out = []
@@ -326,8 +318,7 @@ json.dumps(out)
  * BuildConfig — see `+page.svelte` — so it doesn't ride along here.)
  */
 export async function computeBuildStats(): Promise<BuildStats> {
-	const py = await getPyodide();
-	const result = await py.runPythonAsync(`
+	const result = await py.runPython(`
 import json, sys
 if ${pyStr(HLCL_ROOT)} not in sys.path:
     sys.path.insert(0, ${pyStr(HLCL_ROOT)})
@@ -350,8 +341,7 @@ export interface WorkbookSheet {
  * rather than a JS re-implementation of the vendor scripts.
  */
 export async function readWorkbook(relPath: string): Promise<WorkbookSheet[]> {
-	const py = await getPyodide();
-	const result = await py.runPythonAsync(`
+	const result = await py.runPython(`
 import json, xlrd
 book = xlrd.open_workbook(${pyStr(`${HLCL_ROOT}/build/output/${relPath}`)})
 def text(v):
@@ -367,8 +357,7 @@ json.dumps(sheets)
 
 /** Read a single artifact's raw bytes out of MEMFS for download / zipping. */
 export async function readOutputBytes(relPath: string): Promise<Uint8Array> {
-	const py = await getPyodide();
-	const data = py.FS.readFile(`${HLCL_ROOT}/build/output/${relPath}`);
+	const data = await py.readFile(`${HLCL_ROOT}/build/output/${relPath}`);
 	return data;
 }
 
@@ -393,11 +382,4 @@ export function resetSourcesMount(): void {
  */
 function pyStr(s: string): string {
 	return JSON.stringify(s);
-}
-
-/** Type guard for callers that want to know if the runtime has the expected FS. */
-export function hasFs(
-	py: PyodideRuntime
-): py is PyodideRuntime & { FS: NonNullable<PyodideRuntime['FS']> } {
-	return typeof (py as PyodideRuntime).FS?.readFile === 'function';
 }

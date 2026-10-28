@@ -9,8 +9,18 @@
 	import PreviewTab from '$lib/components/tabs/PreviewTab.svelte';
 	import GenerateTab from '$lib/components/tabs/GenerateTab.svelte';
 	import MigrateTab from '$lib/components/tabs/MigrateTab.svelte';
+	import { untrack } from 'svelte';
+	import { autoBuild } from '$lib/auto-build.svelte';
 	import { appState } from '$lib/state.svelte';
 	let editingName = $state(false);
+
+	// Rebuild in the background whenever the (hydrated) configuration changes.
+	// `snapshotConfig()` reads the whole config, so any edit re-runs this.
+	$effect(() => {
+		if (!appState.hydrated || !appState.ui.auto_build) return;
+		const config = appState.snapshotConfig();
+		untrack(() => autoBuild.request(config));
+	});
 	let editStem = $state('');
 
 	function focusAndSelect(node: HTMLInputElement) {
@@ -45,9 +55,9 @@
 	 * and `unique_footprints` — are sourced from the most recent
 	 * in-browser build via `appState.ui.build_stats`, and are gated on
 	 * the cached `config_hash` matching the live `BuildConfig`: when
-	 * it does, the numbers render in navy; when it doesn't (or there
-	 * is no cached build at all), they fade to "???" and a tiny
-	 * "rebuild to calculate" link appears below the banner.
+	 * it does, the numbers render in navy; when it doesn't, the last
+	 * known numbers fade to grey while the background build catches up
+	 * (or "???" before any build), with a status line below the banner.
 	 *
 	 * The `families` count is computed directly from the live config
 	 * (it's just the number of enabled families in the Libraries tab)
@@ -72,8 +82,7 @@
 	function buildDerivedStat(
 		getter: (s: { components: number; unique_footprints: number }) => number
 	): string {
-		if (statsFresh && cachedStats) return formatInt(getter(cachedStats));
-		return '???';
+		return cachedStats ? formatInt(getter(cachedStats)) : '???';
 	}
 
 	type TabId =
@@ -206,10 +215,10 @@
 						role="group"
 						aria-label={statsFresh
 							? 'Library statistics from the most recent build'
-							: 'Library statistics — stale, run a build to refresh'}
+							: 'Library statistics — updating to match the current settings'}
 						title={statsFresh
 							? 'Computed from the most recent in-browser build.'
-							: 'These numbers are out of date because you have edited the configuration since the last build. Click "rebuild to calculate" below.'}
+							: 'These numbers are from the previous build. A background build is bringing them up to date.'}
 					>
 						<div class="flex min-w-[5.5rem] flex-1 flex-col px-3 py-1.5 sm:min-w-0 sm:flex-initial">
 							<span class="text-[10px] font-semibold tracking-wide text-ink-500 uppercase"
@@ -252,29 +261,40 @@
 					</div>
 
 					<!--
-						Always render the "rebuild to calculate" link so the
-						banner reserves vertical space for it even when the
-						stats are fresh — otherwise toggling between fresh and
-						stale (which happens on every config edit) shifts the
-						tab nav (and any button the user is currently hovering)
-						down a few pixels. `invisible` (visibility:hidden) keeps
-						the box in flow but stops painting it, and the
-						aria-hidden / tabindex / pointer-events guards make the
-						hidden state inert for assistive tech, keyboard users,
-						and stray clicks.
+						Always render the status line so the banner reserves
+						vertical space for it even when the stats are fresh —
+						otherwise toggling between fresh and stale (which happens
+						on every config edit) shifts the tab nav down a few
+						pixels. `invisible` keeps the box in flow but stops
+						painting it.
 					-->
 					<button
 						type="button"
-						onclick={() => (active = 'generate')}
+						onclick={() =>
+							autoBuild.failedHash || !appState.ui.auto_build
+								? autoBuild.buildNow(appState.snapshotConfig())
+								: (active = 'generate')}
 						class={[
-							'self-end pt-0.5 pr-2 text-[10px] font-medium text-ink-500 underline-offset-2 transition hover:text-navy-700 hover:underline',
-							statsFresh && 'pointer-events-none invisible'
+							'self-end pt-0.5 pr-2 text-[10px] font-medium underline-offset-2 transition hover:underline',
+							autoBuild.failedHash ? 'text-rose-600' : 'text-ink-500 hover:text-navy-700',
+							statsFresh && !autoBuild.running && 'pointer-events-none invisible'
 						]}
-						aria-hidden={statsFresh ? 'true' : undefined}
-						tabindex={statsFresh ? -1 : 0}
-						title="Jump to the Generate tab and run a build to refresh these numbers"
+						aria-hidden={statsFresh && !autoBuild.running ? 'true' : undefined}
+						tabindex={statsFresh && !autoBuild.running ? -1 : 0}
+						title="Statistics come from a background build of the current settings"
 					>
-						{cachedStats ? 'stats are stale · ' : 'no build yet · '}rebuild to calculate →
+						{#if autoBuild.running || autoBuild.queuedHash}
+							<span class="inline-flex items-center gap-1">
+								<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500"></span>
+								updating…
+							</span>
+						{:else if autoBuild.failedHash}
+							build failed · retry →
+						{:else if !appState.ui.auto_build}
+							{cachedStats ? 'stats are stale · ' : 'no build yet · '}build now →
+						{:else}
+							waiting for build…
+						{/if}
 					</button>
 				</div>
 			</div>

@@ -308,7 +308,12 @@ export const uiSessionSchema = z.object({
 	 * so existing localStorage envelopes from before this field
 	 * existed continue to parse.
 	 */
-	build_stats: cachedBuildStatsSchema.nullable().default(null)
+	build_stats: cachedBuildStatsSchema.nullable().default(null),
+	/**
+	 * Rebuild in the background whenever the configuration changes. Off
+	 * means builds run only when the user clicks "Build now".
+	 */
+	auto_build: z.boolean().default(true)
 });
 export type UiSession = z.infer<typeof uiSessionSchema>;
 
@@ -416,7 +421,8 @@ export function defaultUiSession(): UiSession {
 		active_preset_id: null,
 		config_name: 'hlcl-build',
 		name_origin: 'manual',
-		build_stats: null
+		build_stats: null,
+		auto_build: true
 	};
 }
 
@@ -455,7 +461,9 @@ export const familyOptionControlCatalogSchema = z.discriminatedUnion('kind', [
 	z.object({
 		kind: z.literal('multiselect'),
 		choices: z.array(z.object({ id: z.string(), label: z.string() })).min(1),
-		default_value: z.array(z.string())
+		default_value: z.array(z.string()),
+		/** `checkboxes` renders a tick-box list instead of pill buttons. */
+		presentation: z.enum(['pills', 'checkboxes']).optional()
 	}),
 	z.object({
 		kind: z.literal('number'),

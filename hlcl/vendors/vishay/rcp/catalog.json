@@ -9,5 +9,34 @@
 	"subtype_order": 30,
 	"sort_order": 30,
 	"available_sizes": ["0603", "1206", "2512"],
-	"options": []
+	"options": [
+		{
+			"id": "extra_parameters",
+			"label": "Extra / non-standard parameters",
+			"help": "Columns outside the database standard. Ticked columns are added after the standard ones.",
+			"control": {
+				"kind": "multiselect",
+				"presentation": "checkboxes",
+				"choices": [
+					{
+						"id": "power",
+						"label": "Power rating"
+					},
+					{
+						"id": "features",
+						"label": "Features"
+					},
+					{
+						"id": "rating_conditions",
+						"label": "Rating conditions"
+					},
+					{
+						"id": "datasheet",
+						"label": "Datasheet link"
+					}
+				],
+				"default_value": []
+			}
+		}
+	]
 }

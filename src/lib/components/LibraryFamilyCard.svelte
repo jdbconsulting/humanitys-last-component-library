@@ -132,6 +132,20 @@
 								<option value={choice.id}>{choice.label}</option>
 							{/each}
 						</select>
+					{:else if opt.control.kind === 'multiselect' && opt.control.presentation === 'checkboxes'}
+						<div class="mt-2 grid gap-1.5 sm:grid-cols-2">
+							{#each opt.control.choices as choice (choice.id)}
+								<label class="flex items-center gap-2 text-xs text-ink-700">
+									<input
+										type="checkbox"
+										class="h-4 w-4 rounded border-ink-300 text-navy-700 focus:ring-navy-500"
+										checked={isSelected(opt.id, choice.id)}
+										onchange={() => toggleMultiselectChoice(opt.id, choice.id)}
+									/>
+									{choice.label}
+								</label>
+							{/each}
+						</div>
 					{:else if opt.control.kind === 'multiselect'}
 						{@const globalLocked = opt.overridesGlobal && !isOverridden(opt.id)}
 						<div class="mt-2 flex flex-wrap gap-2">

@@ -16,7 +16,37 @@
 	let activeKind = $derived(
 		LIBRARY_CATALOG.find((k) => k.id === activeKindId) ?? LIBRARY_CATALOG[0]
 	);
+
+	const familyIds = (kinds: typeof LIBRARY_CATALOG) =>
+		kinds.flatMap((k) => k.subtypes.flatMap((s) => s.families.map((f) => f.id)));
+	const allIds = familyIds(LIBRARY_CATALOG);
+	let activeIds = $derived(familyIds([activeKind]));
+	let activeEnabled = $derived(
+		activeIds.filter((id) => appState.config.families[id]?.enabled).length
+	);
+
+	const bulkButton =
+		'rounded-md border border-ink-200 bg-white px-2.5 py-1 text-xs font-medium text-ink-700 transition hover:border-navy-300 hover:text-navy-800 disabled:cursor-not-allowed disabled:opacity-40';
 </script>
+
+{#snippet bulkToggle(ids: string[], enabledNow: number, what: string)}
+	<div class="flex gap-1.5">
+		<button
+			type="button"
+			class={bulkButton}
+			disabled={enabledNow === ids.length}
+			title="Turn on every {what}"
+			onclick={() => appState.setFamiliesEnabled(ids, true)}>All on</button
+		>
+		<button
+			type="button"
+			class={bulkButton}
+			disabled={enabledNow === 0}
+			title="Turn off every {what}"
+			onclick={() => appState.setFamiliesEnabled(ids, false)}>All off</button
+		>
+	</div>
+{/snippet}
 
 <SectionHeader
 	title="Component family libraries"
@@ -35,6 +65,10 @@
 					class="h-full bg-gradient-to-r from-navy-500 to-emerald-500 transition-all"
 					style:width={`${totalFamilies === 0 ? 0 : (enabledCount / totalFamilies) * 100}%`}
 				></div>
+			</div>
+			<div class="mt-3 flex items-center justify-between gap-2">
+				<span class="text-xs text-ink-500">Every group</span>
+				{@render bulkToggle(allIds, enabledCount, 'family in all four groups')}
 			</div>
 			<p class="mt-3 text-xs text-ink-500">
 				At least one family must be enabled before generation can proceed.
@@ -68,6 +102,17 @@
 	</aside>
 
 	<div class="space-y-8">
+		<div
+			class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-ink-200 bg-white px-4 py-3"
+		>
+			<div>
+				<h3 class="text-sm font-semibold text-ink-900">{activeKind.label}</h3>
+				<p class="font-mono text-[11px] text-ink-500">
+					{activeEnabled} / {activeIds.length} enabled
+				</p>
+			</div>
+			{@render bulkToggle(activeIds, activeEnabled, `${activeKind.label.toLowerCase()} family`)}
+		</div>
 		{#each activeKind.subtypes as sub (sub.id)}
 			<section>
 				<div class="flex items-baseline justify-between">
