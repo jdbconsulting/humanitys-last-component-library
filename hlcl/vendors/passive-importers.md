@@ -84,7 +84,8 @@ Every workbook follows the website's database standard (`/docs/database-standard
 written through `vendors/_standard.py`: standard columns first, in order, then any
 extra columns the family enabled. These importers can add Power (resistors),
 Features, Rating Conditions and Datasheet, chosen per family under the Libraries
-tab's `extra_parameters` option (none by default). Descriptions read
+tab's `extra_parameters` option (none by default). Alternate MFG/MPN pairs are
+written only up to the last pair some row in the sheet fills. Descriptions read
 `RESISTOR THICK FILM 4.7K OHM 5% 0603` or `CAPACITOR CERAMIC 10NF 10% 100V X7R 0402`,
 and jumpers `RESISTOR JUMPER 0 OHM 0402`. A row with a non-ASCII field or a malformed
 description or parameter fails the build.

@@ -71,6 +71,33 @@ class StandardTests(unittest.TestCase):
         with config_with_extras('fam', ['srf']), self.assertRaises(ValueError):
             std.enabled_extras('fam', supported)
 
+    def test_alternate_columns_only_where_some_row_has_data(self):
+        class Sheet:
+            def __init__(self):
+                self.cells = {}
+            def write(self, r, c, v):
+                self.cells[(r, c)] = v
+            def header(self):
+                return [v for (r, c), v in sorted(self.cells.items()) if r == 0]
+
+        def row(mpn, alternates):
+            out = record('R', Comment=mpn, MPN=mpn, Description='RESISTOR THIN FILM 100 OHM 1% 0402',
+                         Value='100', Tolerance='1%')
+            for n in range(2, 6):
+                alt = alternates[n - 2] if n - 2 < len(alternates) else ''
+                out.update({f'MFG {n}': 'ACME' if alt else '', f'MPN {n}': alt})
+            return out
+
+        with config_with_extras('fam', ['alternates']):
+            sheet = Sheet()
+            std.write_sheet(sheet, 'R', 'fam', [row('A1', []), row('A2', ['A2-T'])], ('alternates',))
+            self.assertEqual(sheet.header()[-2:], ['MFG 2', 'MPN 2'])
+            self.assertEqual(len(sheet.header()), len(std.headers('R', [])) + 2)
+            self.assertEqual(sheet.cells[(2, len(sheet.header()) - 1)], 'A2-T')
+            sheet = Sheet()
+            std.write_sheet(sheet, 'R', 'fam', [row('A1', [])], ('alternates',))
+            self.assertEqual(sheet.header(), std.headers('R', []))  # nothing to list
+
     def test_missing_standard_columns_are_rejected(self):
         row = record('FB', Description='FERRITE BEAD 60 OHM 1A 0402', Value='60OHM')
         del row['DCR']

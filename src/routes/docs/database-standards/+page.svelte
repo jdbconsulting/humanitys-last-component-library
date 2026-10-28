@@ -211,7 +211,8 @@
 		it contains no other columns. Some families can add extra, non-standard columns, such as Power,
 		Datasheet, alternate MPNs, SRF or Q: tick them under <em>Extra / non-standard parameters</em> on the
 		family's card in the Libraries tab. Extra columns follow the standard ones and obey the same general
-		rules.
+		rules. Alternate MPN columns (MFG 2 / MPN 2 to MFG 5 / MPN 5) are written only as far as some part
+		in the workbook has an alternate to list.
 	</p>
 	<h3 class="pt-2 text-base font-semibold text-ink-900">Common fields (all types)</h3>
 	{@render fieldTable(commonFields, 'Column', 'Content')}

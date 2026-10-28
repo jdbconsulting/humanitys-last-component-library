@@ -198,12 +198,24 @@ def cells(kind: str, extras: Iterable[str], record: Mapping[str, object]) -> lis
 
 def write_sheet(sheet, kind: str, family_id: str, records: Iterable[Mapping[str, object]],
                 supported: Iterable[str] = ()) -> int:
-    """Write the header and validated rows to an xlwt sheet; return the row count."""
+    """Write the header and validated rows to an xlwt sheet; return the row count.
+
+    Alternate MFG n / MPN n pairs are written only when some row in the
+    sheet fills them, so a family whose parts have at most one alternate
+    exports MFG 2 / MPN 2 and nothing beyond.
+    """
     extras = enabled_extras(family_id, supported)
-    for col, heading in enumerate(headers(kind, extras)):
-        sheet.write(0, col, heading)
-    count = 0
-    for count, record in enumerate(records, 1):
-        for col, cell in enumerate(cells(kind, extras, record)):
-            sheet.write(count, col, cell)
-    return count
+    columns = headers(kind, extras)
+    rows = [cells(kind, extras, record) for record in records]
+    unused = set()
+    for n in range(2, 6):
+        pair = [columns.index(c) for c in (f"MFG {n}", f"MPN {n}") if c in columns]
+        if pair and not any(row[i] for row in rows for i in pair):
+            unused.update(pair)
+    keep = [i for i in range(len(columns)) if i not in unused]
+    for col, i in enumerate(keep):
+        sheet.write(0, col, columns[i])
+    for r, row in enumerate(rows, 1):
+        for col, i in enumerate(keep):
+            sheet.write(r, col, row[i])
+    return len(rows)
