@@ -1,0 +1,165 @@
+{
+	"id": "vishay-tnpw",
+	"name": "Vishay TNPW",
+	"manufacturer": "Vishay",
+	"summary": "AEC-Q200 high-stability thin film; 0.1–1%, ±10–50 ppm/K, sulfur resistant.",
+	"kind": "resistor",
+	"subtype_id": "vishay-tnpw",
+	"subtype_label": "Vishay TNPW",
+	"subtype_order": 30,
+	"sort_order": 30,
+	"available_sizes": ["0201", "0402", "0603", "0805", "1206", "1210"],
+	"options": [
+		{
+			"id": "footprint_names",
+			"label": "Footprint names",
+			"help": "Vendor-specific names keep this family's footprints separate from every other family. Generic IPC-7351B names can be shared with other families; the Priorities tab chooses which family's geometry wins when names overlap.",
+			"control": {
+				"kind": "select",
+				"default_value": "vendor",
+				"choices": [
+					{
+						"id": "vendor",
+						"label": "Vendor-specific, e.g. RESC1608X55_TNPWN"
+					},
+					{
+						"id": "generic",
+						"label": "Generic IPC-7351B, e.g. RESC1608X55N"
+					}
+				]
+			}
+		},
+		{
+			"id": "terminations",
+			"label": "Terminations",
+			"help": "Pure matte tin (e3) is RoHS compliant. SnPb parts (lead-bearing, for military and avionics builds) come from a separate datasheet in 0402–1210.",
+			"control": {
+				"kind": "multiselect",
+				"presentation": "checkboxes",
+				"default_value": ["e3"],
+				"choices": [
+					{
+						"id": "e3",
+						"label": "Pure tin, e3 (RoHS)"
+					},
+					{
+						"id": "snpb",
+						"label": "Tin-lead, SnPb (lead-bearing)"
+					}
+				]
+			}
+		},
+		{
+			"id": "tcr_options",
+			"label": "TCR options",
+			"help": "Temperature-coefficient grades to include. ±15 and ±10 ppm/K exist only at 0.1% tolerance.",
+			"control": {
+				"kind": "multiselect",
+				"presentation": "checkboxes",
+				"default_value": ["H", "E", "X", "Y"],
+				"choices": [
+					{
+						"id": "H",
+						"label": "±50 ppm/K (H)"
+					},
+					{
+						"id": "E",
+						"label": "±25 ppm/K (E)"
+					},
+					{
+						"id": "X",
+						"label": "±15 ppm/K (X)"
+					},
+					{
+						"id": "Y",
+						"label": "±10 ppm/K (Y)"
+					}
+				]
+			}
+		},
+		{
+			"id": "lowest_tcr_only",
+			"label": "Lowest TCR only",
+			"help": "Keep only the lowest-TCR part for each value and tolerance, among the TCR options above. Off lists every TCR the datasheets offer.",
+			"control": {
+				"kind": "toggle",
+				"default_value": false
+			}
+		},
+		{
+			"id": "tolerance_options",
+			"label": "Tolerance options",
+			"help": "Resistance tolerances to include.",
+			"control": {
+				"kind": "multiselect",
+				"presentation": "checkboxes",
+				"default_value": ["F", "D", "B"],
+				"choices": [
+					{
+						"id": "F",
+						"label": "±1% (F)"
+					},
+					{
+						"id": "D",
+						"label": "±0.5% (D)"
+					},
+					{
+						"id": "B",
+						"label": "±0.1% (B)"
+					}
+				]
+			}
+		},
+		{
+			"id": "value_series",
+			"label": "Resistance values",
+			"help": "0.5% and 0.1% parts come in every E192 value. E24/E96 only keeps roughly 60% of the parts.",
+			"control": {
+				"kind": "select",
+				"default_value": "e192",
+				"choices": [
+					{
+						"id": "e192",
+						"label": "Every datasheet value (E24, E96, E192)"
+					},
+					{
+						"id": "e96",
+						"label": "E24 and E96 only"
+					}
+				]
+			}
+		},
+		{
+			"id": "extra_parameters",
+			"label": "Extra / non-standard parameters",
+			"help": "Columns outside the database standard. Ticked columns are added after the standard ones.",
+			"control": {
+				"kind": "multiselect",
+				"presentation": "checkboxes",
+				"default_value": [],
+				"choices": [
+					{
+						"id": "power",
+						"label": "Power rating"
+					},
+					{
+						"id": "features",
+						"label": "Features"
+					},
+					{
+						"id": "rating_conditions",
+						"label": "Rating conditions"
+					},
+					{
+						"id": "datasheet",
+						"label": "Datasheet link"
+					},
+					{
+						"id": "alternates",
+						"label": "Alternate reels (MFG/MPN 2-5)"
+					}
+				]
+			}
+		}
+	]
+}

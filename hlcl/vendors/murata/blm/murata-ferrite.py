@@ -38,8 +38,9 @@ Outputs:
 * build/output/murata-ferrite.xls -- Excel 97-2003 workbook matching
   the per-row schema documented in the top-level README.md ('Database
   Standards' section), so build/output/murata-ferrite.DbLib can link
-  against it. Three worksheets (BLM15 / BLM18 / BLM31), 18 columns
-  each. Library Path / Footprint Path columns reference the shared
+  against it. Three worksheets (BLM15 / BLM18 / BLM31) in the database-
+  standard ferrite-bead layout (vendors/_standard.py). Library Path /
+  Footprint Path columns reference the shared
   build/output/house.SchLib + build/output/house.PcbLib. User-facing.
 
 * build/intermediate/footprints/murata-ferrite-footprints.json -- per-vendor
@@ -63,7 +64,9 @@ Usage:
 """
 
 import csv
+from decimal import Decimal
 import os
+import re
 import sys
 from collections import Counter
 
@@ -90,6 +93,7 @@ if _VENDORS_DIR not in sys.path:
     sys.path.insert(0, _VENDORS_DIR)
 import _common as _vendor_common
 import _dblib as _vendor_dblib
+import _standard
 
 # Catalog / build-target id (plural) -- used for config lookup. The on-disk
 # vendor key (singular) is still what shows up in `*-footprints.json`,
@@ -145,20 +149,14 @@ FAMILY = {
 # Table1/Table2/Table3 mapping order).
 SHEET_ORDER = ["BLM15", "BLM18", "BLM31"]
 
-# Column headers on every sheet. The build/output/murata-ferrite.DbLib written
-# by vendors/_dblib.py mirrors the standard Comment / Description /
-# Library Path / Library Ref / Footprint Path / Footprint Ref (x3
-# density variants) FieldMap set, so every column listed here that
-# matches one of those names gets explicit Altium handling; the rest
-# are auto-discovered by Altium as parameters when the DbLib is loaded.
-HEADERS = [
-    "Comment", "Description", "MFG", "MPN", "Package",
-    "DCR", "Tr", "Qual", "Current", "Impedance",
-    "Library Path", "Library Ref",
-    "Footprint Path", "Footprint Ref",
-    "Footprint Path 2", "Footprint Ref 2",
-    "Footprint Path 3", "Footprint Ref 3",
-]
+# Every sheet uses the database-standard ferrite-bead columns (see
+# vendors/_standard.py); Value is the impedance at 100 MHz. The parts CSV
+# carries nothing beyond the standard fields, so no extras are offered.
+KIND = "FB"
+SUPPORTED_EXTRAS = ()
+
+_IMPEDANCE_RE = re.compile(r"^(\d+(?:\.\d+)?)-ohm @ 100MHz$", re.IGNORECASE)
+_CURRENT_RE = re.compile(r"^(\d+(?:\.\d+)?)(mA|A)$")
 
 
 def family_key(mpn):
@@ -254,21 +252,33 @@ def load_dimensions(path):
     return out
 
 
-def build_description(impedance_str, current_str, imperial_pkg):
-    """'120-Ohm @ 100MHz', '2A', '0402' -> 'FERRITE BEAD 120-OHM 2A 0402'.
+def impedance_ohms(text):
+    """'120-Ohm @ 100MHz' -> Decimal('120'). The standard Value is the
+    impedance at 100 MHz, so any other test frequency is rejected rather
+    than guessed at."""
+    match = _IMPEDANCE_RE.match(text)
+    if not match:
+        raise ValueError(f"Impedance={text!r} is not '<ohms>-Ohm @ 100MHz'")
+    return Decimal(match.group(1))
 
-    Drops the '@ 100MHz' tail from the Impedance string and uppercases
-    the resistance value (matches the hand-maintained workbook this
-    script replaces, so existing BOMs grep cleanly)."""
-    z = impedance_str.split("@", 1)[0].strip().upper()
-    return f"FERRITE BEAD {z} {current_str} {imperial_pkg}"
+
+def current_amps(text):
+    """'450mA' -> Decimal('0.45'); '2A' -> Decimal('2')."""
+    match = _CURRENT_RE.match(text)
+    if not match:
+        raise ValueError(f"Current={text!r} is not '<n>mA' or '<n>A'")
+    amps = Decimal(match.group(1))
+    return amps / 1000 if match.group(2) == "mA" else amps
 
 
 def build_row(mpn, package, dcr, current, impedance, dimensions):
-    """Decode one CSV row into (sheet_name, workbook_row_values, fp_root,
+    """Decode one CSV row into (sheet_name, record, fp_root,
     height_code, used_fallback).
 
-    On success returns ``(sheet_name, row, fp_root, height_code, used_fallback)``.
+    ``record`` is the database-standard row keyed by column name
+    (see vendors/_standard.py).
+
+    On success returns ``(sheet_name, record, fp_root, height_code, used_fallback)``.
     On failure returns ``(None, reason, None, None, None)`` so the caller can
     collect undecodable parts in the diagnostic report.
 
@@ -325,22 +335,23 @@ def build_row(mpn, package, dcr, current, impedance, dimensions):
     fp_root = f"INDC{fam['metric']}X{height_code}"
     fp_cells = _vendor_common.xls_footprint_columns(PCBLIB, fp_root, FAMILY_ID)
 
-    description = build_description(impedance, current, package)
+    try:
+        value = _standard.impedance(impedance_ohms(impedance))
+        current_value = _standard.current(current_amps(current))
+        dcr_value = _standard.dcr(Decimal(dcr))
+    except (ValueError, ArithmeticError) as exc:
+        return None, str(exc), None, None, None
 
-    row = [
-        mpn,                          # Comment
-        description,                  # Description
-        "MURATA",                     # MFG
-        mpn,                          # MPN
-        package,                      # Package
-        dcr,                          # DCR
-        "-55:125",                    # Tr -- BLM family is uniformly -55..+125 C
-        "",                           # Qual (BLM is commercial; no auto/MIL grade)
-        current,                      # Current
-        impedance,                    # Impedance
-        SCHLIB, "FERRITE",            # Library Path / Ref
-    ] + fp_cells
-    return sheet, row, fp_root, height_code, used_fallback
+    record = dict(zip(_standard.COMMON, [
+        mpn, _standard.ferrite_description(value, current_value, package),
+        "MURATA", mpn, package, SCHLIB, "FERRITE", *fp_cells,
+        "",  # Qual (BLM is commercial; no auto/MIL grade)
+    ], strict=True))
+    record.update({
+        "Value": value, "Current": current_value, "DCR": dcr_value,
+        "Tr": "-55:125",  # BLM family is uniformly -55..+125 C
+    })
+    return sheet, record, fp_root, height_code, used_fallback
 
 
 def write_footprints(path, family_height_pairs, dimensions):
@@ -409,9 +420,6 @@ def main():
 
     wb = xlwt.Workbook()
     sheets = {name: wb.add_sheet(name) for name in SHEET_ORDER}
-    for name in SHEET_ORDER:
-        for col, h in enumerate(HEADERS):
-            sheets[name].write(0, col, h)
 
     rows_by_sheet = {name: [] for name in SHEET_ORDER}
     skipped = []
@@ -458,13 +466,13 @@ def main():
             if used_fallback:
                 fallback_bases.add(base_mpn_of(mpn))
 
-    # Sort each sheet's rows by Comment/MPN for determinism, then write.
+    # Sort each sheet's rows by MPN for determinism, then write.
     total = 0
     for sheet_name in SHEET_ORDER:
-        for r_idx, row in enumerate(sorted(rows_by_sheet[sheet_name], key=lambda r: r[0]), start=1):
-            for col, cell in enumerate(row):
-                sheets[sheet_name].write(r_idx, col, cell)
-            total += 1
+        total += _standard.write_sheet(
+            sheets[sheet_name], KIND, FAMILY_ID,
+            sorted(rows_by_sheet[sheet_name], key=lambda r: r["MPN"]),
+            SUPPORTED_EXTRAS)
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(FOOTPRINTS_DIR, exist_ok=True)

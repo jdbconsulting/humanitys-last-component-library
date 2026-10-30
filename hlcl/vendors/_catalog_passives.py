@@ -71,4 +71,4 @@ def decode(row, family):
     return Part(mpn, row['manufacturer'], row['package'], 'C', capacitance(pf),
                 row['tolerance'], {'C0G': '+/-30', 'X7R': '+/-15%', 'X7S': '+/-22%'}[row['dielectric']],
                 '-55:125', row['qualification'], number(voltage)+'V', '',
-                row['features'], row['conditions'], row['datasheet'], geom)
+                row['features'], row['conditions'], row['datasheet'], geom, row['dielectric'])

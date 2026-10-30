@@ -10,8 +10,10 @@ that emits its own ``build/output/panasonic-<family>.xls``,
 ``build/intermediate/footprints/panasonic-<family>-footprints.json``.
 This module hosts the bits every family script needs:
 
-* ``HEADERS`` - canonical workbook column order (matches the schema
-  documented in the top-level README's "Database Standards" section).
+* ``HEADERS`` / ``SUPPORTED_EXTRAS`` / :func:`write_sheet` - the
+  database-standard resistor columns (see :mod:`vendors._standard`),
+  the extra columns these families can supply, and the validated sheet
+  writer every family script calls.
 * ``RESC_BODIES`` - the unique CAPC/RESC body geometries those families
   reference, keyed by IPC-7351B footprint root. Each family script
   passes a subset of these keys to :func:`build_footprint_rows` to
@@ -19,8 +21,9 @@ This module hosts the bits every family script needs:
   sidecar.
 * Resistance-value lists (``e24_e96_combined_*``, ``era_*``) - the
   E24 / E96 series the make_*_range builders iterate over.
-* Per-family-flavoured row builders (``make_res_range`` /
+* Per-family-flavoured record builders (``make_res_range`` /
   ``make_res_jumper`` for thick film, ``make_era_range`` for thin film).
+  Each returns database-standard row dicts keyed by column name.
   Every builder takes a ``family_id`` parameter and consults
   :mod:`_common` for the BuildConfig-resolved density / size sets;
   case sizes the user disabled drop their entire range, and density
@@ -37,20 +40,31 @@ script knows its own depth from the repo root and constructs
 from __future__ import annotations
 
 import _common  # vendors/_common.py — config-aware row helpers
+import _standard  # vendors/_standard.py — database standard columns and rules
 
-# Column schema. Same order every Panasonic-family workbook uses;
-# matches the per-row schema documented in README.md ("Database
-# Standards" section). The three Footprint Path / Ref pairs hold the
-# IPC-7351B density variants (Nominal / Least / Most) for the same
-# physical part.
-HEADERS = [
-    "Comment", "Description", "MFG", "MPN", "Package", "Value",
-    "Tolerance", "Tcr", "Tr", "Qual", "Voltage",
-    "Library Path", "Library Ref",
+# Standard resistor columns (no extras), used for build_table()'s header
+# row. The workbook itself is written by write_sheet(), which appends the
+# extra columns the user enabled for the family.
+HEADERS = _standard.headers("R", [])
+#: Extra-parameter ids (see _standard.EXTRAS) every Panasonic family can supply.
+SUPPORTED_EXTRAS = ("power",)
+#: The three Footprint Path / Ref pairs hold the IPC-7351B density
+#: variants for the same part, in xls_footprint_columns() order.
+FOOTPRINT_COLUMNS = [
     "Footprint Path", "Footprint Ref",
     "Footprint Path 2", "Footprint Ref 2",
     "Footprint Path 3", "Footprint Ref 3",
 ]
+
+
+def write_sheet(sheet, family_id, records):
+    """Write validated database-standard rows to an xlwt sheet."""
+    return _standard.write_sheet(sheet, "R", family_id, records, SUPPORTED_EXTRAS)
+
+
+def as_table(records):
+    """Header row plus one list per record, in standard column order."""
+    return [HEADERS] + [[record[c] for c in HEADERS] for record in records]
 
 
 # --- IPC-SM-782 RESC body catalogue --------------------------------------
@@ -105,35 +119,46 @@ def format_number(num):
         return "Number not in range."
 
 
-def format_resistance(value):
-    """Format a resistance value as a SI-suffixed string (e.g.
-    '4.7k', '100', '1M')."""
-    if value < 1000:
-        return str(value) if value % 1 != 0 else str(int(value))
-    elif value < 1000000:
-        k_val = value / 1000
-        return "{}k".format(k_val if k_val % 1 != 0 else int(k_val))
-    else:
-        m_val = value / 1000000
-        return "{}M".format(m_val if m_val % 1 != 0 else int(m_val))
-
-
-# --- ERJ row builders ----------------------------------------------------
+# --- Row builders --------------------------------------------------------
 
 SCHLIB = r"house.SchLib"
 PCBLIB = r"house.PcbLib"
 
 
+def _record(vendor, pn, construction, value, tolerance, voltage, tcr, tr,
+            qualifications, power, eiacase, schematic, schem_lib, fp_cells):
+    """One database-standard row dict (plus the Power extra)."""
+    package = eiacase.upper()
+    return {
+        "Comment": pn,
+        "Description": _standard.resistor_description(construction, value, tolerance, package),
+        "MFG": vendor.upper(),
+        "MPN": pn,
+        "Package": package,
+        "Library Path": schem_lib,
+        "Library Ref": schematic,
+        **dict(zip(FOOTPRINT_COLUMNS, fp_cells)),
+        "Qual": qualifications,
+        "Value": value,
+        "Tolerance": tolerance,
+        "Voltage": voltage,
+        "Tcr": tcr,
+        "Tr": tr,
+        "Power": power,
+    }
+
+
 def make_res_range(vendor, prefix, suffix, values, power, voltage,
                    tolerance, tcr, tr, qualifications, eiacase,
                    schematic, schem_lib, fp_root, family_id):
-    """Expand a list of resistance values into one workbook row per
-    value, all sharing the same ``prefix``/``suffix`` and electrical
-    params. Each row carries three Library Path / Footprint Ref
+    """Expand a list of resistance values into one database-standard
+    record per value, all sharing the same ``prefix``/``suffix`` and
+    electrical params. Each row carries three Footprint Path / Ref
     column pairs; the actual cell values are computed by
     :func:`vendors._common.xls_footprint_columns` so disabled
     density variants land as empty strings (preserving the
-    fixed-width DbLib schema).
+    fixed-width DbLib schema). ``power`` is the rated power in SI
+    watts (``"0.1W"``) for the optional Power column.
 
     Returns ``[]`` if ``eiacase`` is excluded from the family's
     resolved size set -- the caller's ``table += ...`` is a no-op in
@@ -146,27 +171,24 @@ def make_res_range(vendor, prefix, suffix, values, power, voltage,
     table = []
     for x in values:
         pn = prefix + format_number(x) + suffix
-        description = "RESISTOR THICK FILM " + format_resistance(x) + " OHM " + tolerance + " " + eiacase
-        row = [pn, description, vendor, pn, eiacase, format_resistance(x), tolerance, tcr, tr, qualifications, voltage, schem_lib, schematic]
-        row = row + fp_cells
-        table.append(row)
+        table.append(_record(vendor, pn, "THICK FILM", _standard.ohms(x), tolerance,
+                             voltage, tcr, tr, qualifications, power, eiacase,
+                             schematic, schem_lib, fp_cells))
     return table
 
 
 def make_res_jumper(vendor, pn, current, eiacase, schematic, schem_lib,
                     fp_root, family_id):
-    """Single-row builder for a 0-ohm jumper part. Returns ``[]``
-    when the family's resolved size set excludes ``eiacase`` (same
-    contract as :func:`make_res_range`)."""
+    """Single-record builder for a 0-ohm jumper part. ``current`` is
+    the jumper's rated current; it has no standard column, and a jumper
+    has no power rating, so it is not emitted. Returns ``[]`` when the
+    family's resolved size set excludes ``eiacase`` (same contract as
+    :func:`make_res_range`)."""
     if eiacase not in _common.enabled_sizes(family_id):
         return []
     fp_cells = _common.xls_footprint_columns(PCBLIB, fp_root, family_id)
-    table = []
-    description = "RESISTOR JUMPER 0 OHM " + eiacase
-    row = [pn, description, vendor, pn, eiacase, '0', '', '', '', '', '', schem_lib, schematic]
-    row = row + fp_cells
-    table.append(row)
-    return table
+    return [_record(vendor, pn, "THICK FILM", "0", "", "", "", "", "", "", eiacase,
+                    schematic, schem_lib, fp_cells)]
 
 
 # --- E24 / E96 standard resistance value lists ---------------------------
@@ -229,7 +251,7 @@ def make_era_range(vendor, prefix, suffix, values, power, voltage,
                    schematic, schem_lib, fp_root, family_id):
     """ERA (thin film) variant of :func:`make_res_range`. Differs in
     two places: the part-number formatter (``format_number_era``) and
-    the description (``'THIN FILM'`` instead of ``'THICK FILM'``).
+    the construction (``'THIN FILM'`` instead of ``'THICK FILM'``).
     Honours the same family-resolved size / density gating."""
     if eiacase not in _common.enabled_sizes(family_id):
         return []
@@ -237,10 +259,9 @@ def make_era_range(vendor, prefix, suffix, values, power, voltage,
     table = []
     for x in values:
         pn = prefix + format_number_era(x, family_id) + suffix
-        description = "RESISTOR THIN FILM " + format_resistance(x) + " OHM " + tolerance + " " + eiacase
-        row = [pn, description, vendor, pn, eiacase, format_resistance(x), tolerance, tcr, tr, qualifications, voltage, schem_lib, schematic]
-        row = row + fp_cells
-        table.append(row)
+        table.append(_record(vendor, pn, "THIN FILM", _standard.ohms(x), tolerance,
+                             voltage, tcr, tr, qualifications, power, eiacase,
+                             schematic, schem_lib, fp_cells))
     return table
 
 

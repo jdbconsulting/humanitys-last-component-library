@@ -5,6 +5,7 @@ The generated-artifact audit additionally requires python hlcl/build.py all.
 """
 import copy
 import csv
+import dataclasses
 import json
 import sys
 import unittest
@@ -14,6 +15,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT/'hlcl'), str(ROOT/'hlcl/vendors'), str(ROOT/'hlcl/house')]
 import _common
+import _standard
 from _catalog_passives import decode as capacitor
 from _vishay_passives import decode as resistor
 from build import load_module
@@ -34,7 +36,7 @@ def find_part(family, mpn):
 class PassiveCatalogTests(unittest.TestCase):
     def test_all_catalog_rows_decode_and_have_distinct_mpns(self):
         for family in ('murata-gcd', 'murata-krm', 'kemet-x7r', 'kemet-open-mode',
-                       'kemet-esd-c0g', 'tdk-c', 'vishay-crcw', 'vishay-rcs', 'vishay-rcp',
+                       'kemet-esd-c0g', 'tdk-c', 'vishay-crcw', 'vishay-tnpw', 'vishay-rcs', 'vishay-rcp',
                        'vishay-mc-precision', 'vishay-mc-at'):
             with self.subTest(family=family):
                 rows = catalog(family)
@@ -47,7 +49,16 @@ class PassiveCatalogTests(unittest.TestCase):
 
     def test_requested_values_and_ratings(self):
         cases = [
+            ('vishay-crcw','CRCW02011K00FKED','1k','1%','0.05W'),
+            ('vishay-crcw','CRCW020110R0FNED','10','1%','0.05W'),
+            ('vishay-crcw','CRCW020110K0FNED','10k','1%','0.05W'),
+            ('vishay-crcw','CRCW04021R00FNED','1','1%','0.063W'),
             ('vishay-crcw','CRCW0603562RFKEA','562','1%','0.1W'),
+            ('vishay-tnpw','TNPW12061K32DEEA','1.32k','0.5%','0.27W'),  # datasheet example
+            ('vishay-tnpw','TNPW040228K0BEED','28k','0.1%','0.07W'),
+            ('vishay-tnpw','TNPW020122R0DEED','22','0.5%','0.05W'),
+            ('vishay-tnpw','TNPW08053R52BYEA','3.52','0.1%','0.14W'),
+            ('vishay-tnpw','TNPW12061K32DETA','1.32k','0.5%','0.25W'),  # SnPb
             ('vishay-crcw','CRCW04024K70JNED','4.7k','5%','0.063W'),
             ('vishay-crcw','CRCW121810K0FKEK','10k','1%','1W'),
             ('vishay-crcw','CRCW201010K0FKEF','10k','1%','0.75W'),
@@ -80,6 +91,17 @@ class PassiveCatalogTests(unittest.TestCase):
                             ('vishay-crcw','CRCW06030K10FKEA'),  # non-canonical 100 ohm
                             ('vishay-crcw','CRCW06031002FKEA'),  # no embedded unit
                             ('vishay-crcw','CRCW06030000FKEA'),  # jumper needs Z0
+                            ('vishay-crcw','CRCW020146R4FKED'),  # 0201 100 ppm starts at 47 ohm
+                            ('vishay-crcw','CRCW02011K00FKEA'),  # EA is not a 0201 reel
+                            ('vishay-crcw','CRCW02019R10JNED'),  # 0201 5% below 10 ohm is JX
+                            ('vishay-crcw','CRCW04021R00FXED'),  # X TCR is 0201 only
+                            ('vishay-tnpw','TNPW0603100RBXEC'),  # EC reel only for 25/50 ppm
+                            ('vishay-tnpw','TNPW0201100RFEED'),  # 0201 has no 1% grade
+                            ('vishay-tnpw','TNPW12102M20BEEA'),  # 1210 0.1% stops at 2.13 Mohm
+                            ('vishay-tnpw','TNPW06031K01FEEA'),  # E192-only value at 1%
+                            ('vishay-tnpw','TNPW0201100RDETD'),  # no SnPb 0201
+                            ('vishay-tnpw','TNPW0402100RDETP'),  # SnPb TP reel only at 0.1%
+                            ('vishay-tnpw','TNPW0402100RFEEA'),  # 0402 reel is ED
                             ('vishay-rcs','RCS040210K0FKEA'),
                             ('vishay-rcs','RCS08052491FKEA'),
                             ('vishay-mc-at','MCS04020D2491BE000'),
@@ -109,7 +131,7 @@ class PassiveCatalogTests(unittest.TestCase):
                               g['model']['topTerminalLengthMm']),(bottom,top))
 
     def test_crcw_jumpers_ratings_and_terminals(self):
-        for size,pack,current in [('0402','ED','1.5A'),('0603','EA','2A'),('0805','EA','2.5A'),
+        for size,pack,current in [('0201','ED','1A'),('0402','ED','1.5A'),('0603','EA','2A'),('0805','EA','2.5A'),
                                   ('1206','EA','3.5A'),('1210','EA','5A'),('1218','EK','7A'),
                                   ('2010','EF','6A'),('2512','EG','7A')]:
             p = resistor({'mpn':f'CRCW{size}0000Z0{pack}'},'vishay-crcw')
@@ -121,13 +143,119 @@ class PassiveCatalogTests(unittest.TestCase):
         self.assertIn('standard operation mode',p.conditions)
         p = resistor({'mpn':'CRCW06031R00FNEA'},'vishay-crcw')
         self.assertEqual((p.tolerance,p.tcr),('1%','+/-200'))
+        # 0201 has its own commercial datasheet: no AEC-Q200, 50 mOhm jumper.
+        p = resistor({'mpn':'CRCW02014R70FXED'},'vishay-crcw')
+        self.assertEqual((p.tcr,p.voltage,p.qualification),('-200/+400','30V',''))
+        self.assertIn('20052',p.datasheet)
+        self.assertIn('<=50mOhm',resistor({'mpn':'CRCW02010000Z0ED'},'vishay-crcw').features)
         # T1 (bottom) sets the lands; T2 (top) only shapes the 3D model.
-        for size,pack,root,bottom,top in [('0402','ED','RESC1005X40_CRCW',.25,.2),
+        for size,pack,root,bottom,top in [('0201','ED','RESC0603X26_CRCW',.15,.1),
+                                          ('0402','ED','RESC1005X40_CRCW',.25,.2),
                                           ('1218','EK','RESC3246X60_CRCW',.45,.4),
                                           ('2512','EG','RESC6332X70_CRCW',.6,.6)]:
             g = resistor({'mpn':f'CRCW{size}10K0FK{pack}'},'vishay-crcw').geometry
             self.assertEqual((g['root'],g['bodyMm']['terminalLengthNominal'],
                               g['model']['topTerminalLengthMm']),(root,bottom,top))
+
+    def assert_catalog_complete(self, family, grades):
+        """Every grade/value the decoder accepts on each size's catalog reel is listed."""
+        rows = {r['mpn'] for r in catalog(family)}
+        reels = {(m[:8], m[14:]) for m in rows}
+        codes = {m[8:12] for m in rows}
+        missing = []
+        for model_size, reel in reels:
+            for code in codes:
+                for grade in grades:
+                    mpn = f'{model_size}{code}{grade}{reel}'
+                    try:
+                        resistor({'mpn':mpn},family)
+                    except ValueError:
+                        continue
+                    if mpn not in rows:
+                        missing.append(mpn)
+        self.assertEqual(missing, [])
+
+    def test_crcw_catalog_lists_every_grade_the_decoder_accepts(self):
+        self.assert_catalog_complete('vishay-crcw', ('FK','FN','FX','JN','JX','Z0'))
+
+    def test_tnpw_catalog_lists_every_grade_the_decoder_accepts(self):
+        self.assert_catalog_complete('vishay-tnpw', [t + c for t in 'FDB' for c in 'HEXY'])
+
+    def test_tnpw_options_and_alternates(self):
+        importer = load_module(str(ROOT/'hlcl/vendors/vishay/tnpw/importer.py'))
+        parts = [importer.decode(r) for r in catalog('vishay-tnpw')]
+
+        def chosen(**options):
+            raw = json.loads((ROOT/'hlcl/factory-defaults.json').read_text())
+            raw['families']['vishay-tnpw']['options'].update(options)
+            with patch.object(importer._config, 'current', return_value=importer._config.from_dict(raw)):
+                return [p.mpn for p in importer.select(parts)]
+
+        default = chosen()
+        self.assertEqual(len(default), 37622)  # e3 only, every TCR, tolerance and E192 value
+        self.assertFalse(any(m[14:] in importer.SNPB_REELS for m in default))
+        self.assertEqual(len(chosen(terminations=['e3', 'snpb'])), len(parts))
+        lowest = chosen(lowest_tcr_only=True)
+        self.assertEqual(len(lowest), len({(m[:13], m[14:]) for m in default}))
+        self.assertIn('TNPW0805100RBYEA', lowest)  # 10 ppm wins at 0.1%
+        self.assertNotIn('TNPW0805100RBEEA', lowest)
+        self.assertEqual({m[12] for m in chosen(tolerance_options=['B'])}, {'B'})
+        self.assertNotIn('TNPW08051K01DEEA', chosen(value_series='e96'))  # 1.01k is E192-only
+        self.assertIn('TNPW08051K02DEEA', chosen(value_series='e96'))
+
+        record = resistor({'mpn':'TNPW06031K00BEEA'},'vishay-tnpw').record('vishay-tnpw')
+        self.assertEqual(record['MPN 2'], 'TNPW06031K00BEEC')
+        record = resistor({'mpn':'TNPW06031K00BXEA'},'vishay-tnpw').record('vishay-tnpw')
+        self.assertEqual(record['MPN 2'], '')  # no 20,000-piece reel at 15 ppm
+
+    def test_crcw_tcr_options_and_reel_alternates(self):
+        importer = load_module(str(ROOT/'hlcl/vendors/vishay/crcw/importer.py'))
+        parts = [importer.decode(r) for r in catalog('vishay-crcw')]
+
+        def chosen(**options):
+            raw = json.loads((ROOT/'hlcl/factory-defaults.json').read_text())
+            raw['families']['vishay-crcw']['options'].update(options)
+            with patch.object(importer._config, 'current', return_value=importer._config.from_dict(raw)):
+                return {p.mpn for p in importer.select(parts)}
+
+        self.assertEqual(len(chosen()), len(parts))  # defaults: every TCR
+        lowest = chosen(lowest_tcr_only=True)
+        self.assertEqual(len(lowest), 8627)  # one TCR per value, tolerance and reel
+        self.assertIn('CRCW020110K0FKED', lowest)
+        self.assertNotIn('CRCW020110K0FNED', lowest)
+        self.assertIn('CRCW020110R0FNED', lowest)  # FN is the tightest 1% grade at 10 ohm
+        only_100 = chosen(tcr_options=['K'])
+        self.assertTrue(all(m[13] in 'K0' for m in only_100))
+        self.assertIn('CRCW06030000Z0EA', only_100)  # jumpers have no TCR
+        self.assertFalse(any(m[12:14] == 'JN' for m in chosen(tcr_options=['K', 'X'])))
+
+        record = resistor({'mpn':'CRCW06031K00FKEA'},'vishay-crcw').record('vishay-crcw')
+        self.assertEqual([record[f'MPN {n}'] for n in range(2, 6)],
+                         ['CRCW06031K00FKEC','CRCW06031K00FKED','CRCW06031K00FKEE','CRCW06031K00FKEI'])
+        self.assertEqual(record['MFG 2'], 'VISHAY')
+        self.assertEqual(_standard.cells('R', ['alternates'], record)[-8:-6], ['VISHAY','CRCW06031K00FKEC'])
+        record = resistor({'mpn':'CRCW1218100RFKEK'},'vishay-crcw').record('vishay-crcw')
+        self.assertEqual((record['MFG 2'], record['MPN 2']), ('', ''))  # 1218 has one reel
+
+    def test_crcw_rows_follow_the_database_standard(self):
+        def row(mpn):
+            with patch.object(_common,'density_codes',return_value=('L','N','M')):
+                record = resistor({'mpn':mpn},'vishay-crcw').record('vishay-crcw')
+            return dict(zip(_standard.headers('R',[]),_standard.cells('R',[],record)))
+        r = row('CRCW06034K70JNEA')
+        self.assertEqual(list(r)[13:],['Qual','Value','Tolerance','Voltage','Tcr','Tr'])
+        self.assertEqual((r['Description'],r['MFG'],r['Package'],r['Value'],r['Tolerance'],
+                          r['Voltage'],r['Tcr'],r['Tr'],r['Qual'],r['Library Ref']),
+                         ('RESISTOR THICK FILM 4.7K OHM 5% 0603','VISHAY','0603','4.7k','5%',
+                          '75V','+/-200','-55:155','AEC-Q200','RES'))
+        self.assertEqual([r[f'Footprint Ref{n}'] for n in ('',' 2',' 3')],
+                         ['RESC1608X50_CRCWN','RESC1608X50_CRCWL','RESC1608X50_CRCWM'])
+        self.assertEqual(row('CRCW02012M20FNED')['Description'],'RESISTOR THICK FILM 2.2M OHM 1% 0201')
+        self.assertEqual(row('CRCW0402100RFKED')['Description'],'RESISTOR THICK FILM 100 OHM 1% 0402')
+        self.assertEqual(row('CRCW04020000Z0ED')['Description'],'RESISTOR JUMPER 0 OHM 0402')
+        bad = dataclasses.replace(resistor({'mpn':'CRCW04024K70JNED'},'vishay-crcw'),value='4.7k\u03a9')
+        with self.assertRaises(ValueError):
+            _standard.cells('R',[],bad.record('vishay-crcw'))
 
     def test_era_a_keeps_mixed_codes(self):
         mod = load_module(str(ROOT/'hlcl/vendors/panasonic/era-a/panasonic-era-a.py'))
@@ -146,10 +274,10 @@ class PassiveCatalogTests(unittest.TestCase):
         for base, size, suffixes, height in [('CL10B223KC8WPN','0603',('C','D'),90),
                                            ('CL31B474KCHWPN','1206',('E','F'),180)]:
             row, root, _ = mod.build_row(base,{size})
-            self.assertEqual(row[mod.HEADERS.index('Qual')],'AEC-Q200')
-            self.assertEqual([row[mod.HEADERS.index(f'MPN {n}')] for n in (2,3)],
+            self.assertEqual(row['Qual'],'AEC-Q200')
+            self.assertEqual([row[f'MPN {n}'] for n in (2,3)],
                              [base+s for s in suffixes])
-            self.assertEqual(row[mod.HEADERS.index('MPN 4')],'')
+            self.assertEqual(row['MPN 4'],'')
             self.assertTrue(root.endswith(f'X{height}_SAMA'))
 
     def test_manufacturer_pad_geometry_survives_density_expansion(self):

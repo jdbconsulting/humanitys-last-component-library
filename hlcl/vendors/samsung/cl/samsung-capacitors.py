@@ -15,9 +15,8 @@ at the top of this file).
 
 Outputs:
 
-* build/output/samsung-capacitors.xls -- Excel 97-2003 workbook
-  matching the per-row schema documented in the top-level README.md
-  ("Database Standards" section), so that
+* build/output/samsung-capacitors.xls -- Excel 97-2003 workbook of
+  database-standard capacitor rows (vendors/_standard.py), so that
   build/output/samsung-capacitors.DbLib can link against it. One
   worksheet named 'CL'. Library Path / Footprint Path columns reference
   the shared build/output/house.SchLib + build/output/house.PcbLib
@@ -40,7 +39,9 @@ code). Samsung's own "Product Line-Up" tables in samsung_mlcc.pdf use
 '#' there as the design-intent wildcard; we strip / omit that slot
 entirely on the input side and emit four concrete orderable variants
 per row -- the same 14-char base with a Samsung packaging-code
-suffix appended -- into (MFG 2, MPN 2) .. (MFG 5, MPN 5):
+suffix appended -- into (MFG 2, MPN 2) .. (MFG 5, MPN 5), the
+"alternates" extra columns (written only when the family's
+extra_parameters option enables them):
 
   MFG 2/MPN 2: <base>C   7" reel,  cardboard (paper)  carrier tape
   MFG 3/MPN 3: <base>L   13" reel, cardboard (paper)  carrier tape
@@ -60,7 +61,7 @@ Not every electrical part is built in all four reel formats -- for
 chips with body T <= ~0.85 mm Samsung only ships paper (C/L), and
 for T >= 1.0 mm only embossed (E/F), per the size/thickness->media
 table in samsung_mlcc.pdf p. 123. The script emits all four
-unconditionally (every MFG* always set to "Samsung Electro-Mechanics")
+unconditionally (every MFG* always set to "SAMSUNG ELECTRO-MECHANICS")
 and leaves it to the Part Choices tool / distributor lookup to report
 which of the four resolve to real orderable SKUs. This keeps the
 library flat (one row per electrical part, not four) while still
@@ -68,8 +69,9 @@ giving the BOM flow enough concrete MPNs to chase. Mirrors the same
 mechanism used by vendors/murata/gcm/murata-gcm.py (PACK_SUFFIXES =
 L/K/D/J).
 
-The MFG string is the canonical Octopart manufacturer name -- not the
-all-caps short form "SAMSUNG", which is ambiguous in Octopart's DB
+The MFG string is the canonical Octopart manufacturer name, upper-cased
+per the database standard -- not the short form "SAMSUNG", which is
+ambiguous in Octopart's DB
 (it matches Samsung Electronics, Samsung SDI, Samsung Display, etc.
 in addition to Samsung Electro-Mechanics) and causes Altium Parts
 Provider to return "Not found" for every Part Choice. "Murata" works
@@ -88,6 +90,7 @@ Usage:
 import os
 import sys
 from collections import Counter
+from decimal import Decimal
 
 import xlwt
 
@@ -113,6 +116,7 @@ if _VENDORS_DIR not in sys.path:
     sys.path.insert(0, _VENDORS_DIR)
 import _common as _vendor_common
 import _dblib as _vendor_dblib
+import _standard
 
 VENDOR_KEY = "samsung-capacitors"
 FAMILY_ID = VENDOR_KEY  # catalog id matches on-disk vendor key
@@ -180,14 +184,16 @@ TEMPERATURE_COEFFICIENT = {
 VOLTAGE_MAP = {
     'S': '2.5V', 'R': '4V', 'Q': '6.3V', 'P': '10V', 'O': '16V',
     'A': '25V', 'L': '35V', 'B': '50V', 'C': '100V', 'D': '200V',
-    'E': '250V', 'F': '350V', 'G': '500V', 'H': '630V', 'I': '1kV',
-    'J': '2kV', 'K': '3kV',
+    'E': '250V', 'F': '350V', 'G': '500V', 'H': '630V', 'I': '1000V',
+    'J': '2000V', 'K': '3000V',
 }
 
+# 'F' depends on the value (samsung_mlcc.pdf p. 6): +/-1pF below 10pF,
+# 1% from 10pF up; see decode_tolerance().
 TOLERANCE_MAP = {
     'N': '+/-0.03pF', 'A': '+/-0.05pF', 'B': '+/-0.1pF',
-    'C': '+/-0.25pF', 'D': '+/-0.50pF',
-    'F': '+/-1pF/1%',
+    'C': '+/-0.25pF', 'D': '+/-0.5pF',
+    'F': None,
     'G': '2%', 'J': '5%', 'K': '10%', 'M': '20%',
     'Z': '-20/+80%',
 }
@@ -246,45 +252,37 @@ AUTOMOTIVE = {
     "CL31B474KCHWPN": ("180", 1.8, ("E", "F")),
 }
 
-# Columns emitted in the xls, in order. Must match the per-row schema
-# documented in README.md ("Database Standards" section). The MFG 2/MPN 2
-# .. MFG 5/MPN 5 slots carry Samsung-internal packaging alternates of
-# the same electrical part, NOT cross-vendor substitutes. The numbered
-# slots start at 2 (the unsuffixed MFG/MPN above is slot 1, by
-# convention; it carries the 14-char design-intent base with no
-# packaging code).
-HEADERS = [
-    "Comment", "Description", "MFG", "MPN",
-    "MFG 2", "MPN 2", "MFG 3", "MPN 3",
-    "MFG 4", "MPN 4", "MFG 5", "MPN 5",
-    "Package", "Value",
-    "Tolerance", "Tcr", "Tr", "Qual", "Voltage",
-    "Library Path", "Library Ref",
-    "Footprint Path", "Footprint Ref",
-    "Footprint Path 2", "Footprint Ref 2",
-    "Footprint Path 3", "Footprint Ref 3",
-]
+# Upper-case per the database standard; see the module docstring for why
+# this is the full Octopart name and not "SAMSUNG".
+MFG = "SAMSUNG ELECTRO-MECHANICS"
 
-
-def format_capacitance(pf):
-    """Format a capacitance in picofarads as e.g. '4.7nF', '100pF', '1uF'."""
-    if pf < 1000:
-        return str(pf).rstrip('0').rstrip('.') + 'pF'
-    if pf < 1e6:
-        return str(pf / 1e3).rstrip('0').rstrip('.') + 'nF'
-    return str(pf / 1e6).rstrip('0').rstrip('.') + 'uF'
+# Extra (non-standard) columns this family can supply (_standard.EXTRAS).
+# The MFG 2/MPN 2 .. MFG 5/MPN 5 "alternates" carry Samsung-internal
+# packaging variants of the same electrical part, NOT cross-vendor
+# substitutes; slot 1 is the unsuffixed design-intent base in MFG/MPN.
+# "features" flags the open-mode automotive parts.
+SUPPORTED_EXTRAS = ("features", "alternates")
+ALTERNATE_SLOTS = range(2, 6)
 
 
 def decode_capacitance(cap_code):
     """'105' -> 1_000_000 pF (= 1uF); '4R7' -> 4.7 pF; etc."""
     if 'R' in cap_code:
-        return float(cap_code.replace('R', '.'))
-    return float(cap_code[0:2]) * (10 ** int(cap_code[2]))
+        return Decimal(cap_code.replace('R', '.'))
+    return Decimal(cap_code[0:2]) * 10 ** int(cap_code[2])
+
+
+def decode_tolerance(tol_code, pf):
+    """Tolerance field text; code 'F' is +/-1pF below 10pF, else 1%."""
+    if tol_code == 'F':
+        return '+/-1pF' if pf < 10 else '1%'
+    return TOLERANCE_MAP[tol_code]
 
 
 def build_row(pn, enabled_sizes: frozenset):
-    """Decode a Samsung CL part number into a workbook row plus the
-    (metric, thick_code) body key. Returns (row, fp_root, body_key)
+    """Decode a Samsung CL part number into a database-standard record
+    (a dict keyed by column name, see vendors/_standard.py) plus the
+    (metric, thick_code) body key. Returns (record, fp_root, body_key)
     on success, or (None, reason, None) when a field can't be
     decoded or the row's package size is disabled by the active
     config.
@@ -319,44 +317,43 @@ def build_row(pn, enabled_sizes: frozenset):
         return None, f"disabled by config (size {eia})", None
 
     dielectric = DIELECTRIC_MAP[dielectric_code]
-    tr = TEMPERATURE_RANGE[dielectric]
-    tcr = TEMPERATURE_COEFFICIENT[dielectric]
+    pf = decode_capacitance(cap_code)
+    value = _standard.capacitance(pf)
+    tol = decode_tolerance(tol_code, pf)
     rv = VOLTAGE_MAP[volt_code]
-    tol = TOLERANCE_MAP[tol_code]
     height = THICKNESS_TO_HEIGHT_CODE[thick_code]
 
-    cap_str = format_capacitance(decode_capacitance(cap_code))
-    if pn in AUTOMOTIVE:
+    automotive = pn in AUTOMOTIVE
+    if automotive:
         height = AUTOMOTIVE[pn][0]
-    fp_root = f"CAPC{metric}X{height}" + ("_SAMA" if pn in AUTOMOTIVE else "")
+    fp_root = f"CAPC{metric}X{height}" + ("_SAMA" if automotive else "")
     fp_cells = _vendor_common.xls_footprint_columns(PCBLIB, fp_root, FAMILY_ID)
 
-    description = (
-        f"CAPACITOR CERAMIC {cap_str.upper()} {tol} {rv} {dielectric} {eia}"
-        + (" OPEN MODE AEC-Q200" if pn in AUTOMOTIVE else "")
-    )
-
-    pack_cells = []
-    for suffix in (AUTOMOTIVE[pn][2] if pn in AUTOMOTIVE else PACK_SUFFIXES):
-        pack_cells += ["Samsung Electro-Mechanics", pn + suffix]
-    pack_cells += [""] * (8 - len(pack_cells))
-
-    row = [
-        pn,                           # Comment
-        description,                  # Description
-        "Samsung Electro-Mechanics",  # MFG (canonical Octopart name; "SAMSUNG" alone is ambiguous and won't resolve)
-        pn,                           # MPN  (14-char design-intent base, no packaging code)
-        *pack_cells,                  # MFG 2/MPN 2 .. MFG 5/MPN 5
-        eia,                          # Package
-        cap_str,                      # Value
-        tol,                          # Tolerance
-        tcr,                          # Tcr
-        tr,                           # Tr
-        "AEC-Q200" if pn in AUTOMOTIVE else "",  # qualification from exact product page
-        rv,                           # Voltage
-        SCHLIB, "CAP",                # Library Path / Ref
-    ] + fp_cells
-    return row, fp_root, (metric, pn if pn in AUTOMOTIVE else thick_code)
+    record = {
+        **dict(zip(_standard.COMMON, [
+            pn,                                   # Comment
+            _standard.capacitor_description(value, tol, rv, dielectric, eia),
+            MFG,
+            pn,                                   # MPN: 14-char base, no packaging code
+            eia,                                  # Package
+            SCHLIB, "CAP",                        # Library Path / Ref
+            *fp_cells,
+            "AEC-Q200" if automotive else "",     # qualification from exact product page
+        ])),
+        "Value": value,
+        "Tolerance": tol,
+        "Voltage": rv,
+        "Tcr": TEMPERATURE_COEFFICIENT[dielectric],
+        "Tr": TEMPERATURE_RANGE[dielectric],
+        "Features": f"{dielectric}; open mode" if automotive else "",
+    }
+    suffixes = AUTOMOTIVE[pn][2] if automotive else PACK_SUFFIXES
+    for slot in ALTERNATE_SLOTS:
+        record[f"MFG {slot}"] = record[f"MPN {slot}"] = ""
+    for slot, suffix in zip(ALTERNATE_SLOTS, suffixes):
+        record[f"MFG {slot}"] = MFG
+        record[f"MPN {slot}"] = pn + suffix
+    return record, fp_root, (metric, pn if automotive else thick_code)
 
 
 # --- Per-vendor footprint JSON output ------------------------------------
@@ -413,12 +410,7 @@ def write_footprints_json(path, bodies):
 def main():
     enabled_sizes = _vendor_common.enabled_sizes(FAMILY_ID)
 
-    wb = xlwt.Workbook()
-    sheet = wb.add_sheet("CL")
-    for col, h in enumerate(HEADERS):
-        sheet.write(0, col, h)
-
-    row_idx = 0
+    records = []
     skipped = []
     config_skipped = 0
     eia_counts = Counter()
@@ -431,21 +423,21 @@ def main():
                 continue
             _, pn = line.split(",", 1)
 
-            row, info, body_key = build_row(pn, enabled_sizes)
-            if row is None:
+            record, info, body_key = build_row(pn, enabled_sizes)
+            if record is None:
                 if isinstance(info, str) and info.startswith("disabled by config"):
                     config_skipped += 1
                 else:
                     skipped.append((pn, info))
                 continue
 
-            row_idx += 1
-            for col, cell in enumerate(row):
-                sheet.write(row_idx, col, cell)
-
-            eia_counts[row[HEADERS.index("Package")]] += 1
+            records.append(record)
+            eia_counts[record["Package"]] += 1
             unique_bodies.add(body_key)
 
+    wb = xlwt.Workbook()
+    row_idx = _standard.write_sheet(wb.add_sheet("CL"), "C", FAMILY_ID, records,
+                                    supported=SUPPORTED_EXTRAS)
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(FOOTPRINTS_DIR, exist_ok=True)
     wb.save(OUTPUT_XLS)

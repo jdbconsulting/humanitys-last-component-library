@@ -17,16 +17,17 @@ differences:
      automotive qualification).
   2. The ``TCR_BY_DIELECTRIC`` table is extended with the older
      Murata-internal class-1 codes (CH, SL, CJ, CK, UJ) that GRM
-     uses in addition to the IEC names. Class-2-style two-letter
-     codes (B, R, F) GRM also ships -- but their published TC bands
+     uses in addition to the IEC names. Class-2-style JIS codes
+     (B, R, F) GRM also ships -- but their published TC bands
      vary by part-size, so we leave Tcr blank and let
      ``unknown_dielectrics`` surface the count.
   3. Output paths point at build/output/murata-grm.* and
      build/intermediate/footprints/murata-grm-footprints.json.
 
-All other transformations (mm parsing, reel-suffix MPN expansion,
-EIA-size lookup, footprint naming, status filtering) are line-for-line
-the same as the GCM script. Where a transformation has policy
+All other transformations (mm parsing, reel-suffix MPN expansion into
+the "alternates" extra columns, EIA-size lookup, footprint naming,
+status filtering, database-standard rows via vendors/_standard.py) are
+line-for-line the same as the GCM script. Where a transformation has policy
 implications worth explaining, the comment is duplicated here rather
 than referenced into ../gcm/murata-gcm.py to keep this file
 readable on its own.
@@ -78,6 +79,7 @@ if _VENDORS_DIR not in sys.path:
     sys.path.insert(0, _VENDORS_DIR)
 import _common as _vendor_common
 import _dblib as _vendor_dblib
+import _standard
 
 VENDOR_KEY = "murata-grm"
 FAMILY_ID = VENDOR_KEY  # catalog id matches on-disk vendor key for GRM
@@ -130,11 +132,13 @@ TERMINAL_BY_METRIC = {
 
 # Dielectric -> Tcr string. GRM uses both IEC dielectric names (X7R,
 # C0G, etc.) and older Murata-internal codes (CH, SL, CJ, CK, UJ).
-# Class 1 (paraelectric, linear TC) entries are in ppm/°C; Class 2
-# (ferroelectric, nonlinear TC) entries are the allowable
-# capacitance-change bands over the rated temperature range.
-# See EIA-RS-198 / IEC 60384-21 for the IEC scheme; the Murata
-# part-numbering catalogue covers the legacy codes.
+# Class 1 (paraelectric, linear TC) entries are in ppm/°C, written
+# without the unit per the database standard; Class 2 (ferroelectric,
+# nonlinear TC) entries are the allowable capacitance-change bands over
+# the rated temperature range. See EIA-RS-198 / IEC 60384-21 for the
+# IEC scheme; the temperature-characteristics table in
+# vendors/murata/reference/murata_part_numbering.pdf (p. 3) covers the
+# legacy codes.
 #
 # Codes Murata uses where the published TC depends on the part size
 # (B, R, F, the various "two-letter" pre-IEC characteristics) are
@@ -142,21 +146,21 @@ TERMINAL_BY_METRIC = {
 # end of the run surfaces the count so we can revisit the table.
 TCR_BY_DIELECTRIC = {
     # Class 1, IEC names
-    "C0G": "+/-30 ppm",
-    "X8G": "+/-30 ppm",
-    "U2J": "-750 ppm",
-    "X8N": "+/-30 ppm",
+    "C0G": "+/-30",
+    "X8G": "+/-30",
+    "U2J": "-750",
     # Class 1, older Murata codes
     # CH = NP0 with looser tolerance than C0G (Murata legacy); +/-60 ppm
     # is the figure listed in the GRM master catalog (cat. C02E) for
-    # the CH characteristic.
-    "CH":  "+/-60 ppm",
-    # SL = negative-going TC: 0/-750 ppm (a.k.a. N750-style); the
-    # Murata catalogue lists the band as +350/-1000 ppm but the
-    # nominal is -750 ppm, which is what the BOM consumer cares about.
-    "SL":  "0/-750 ppm",
+    # the CH characteristic. CJ and CK widen that to +/-120 and +/-250.
+    "CH":  "+/-60",
+    "CJ":  "+/-120",
+    "CK":  "+/-250",
+    # SL = JIS +350 to -1000 ppm/°C band (the part-numbering table's
+    # published characteristic; the field needs a signed band).
+    "SL":  "+350/-1000",
     # UJ is U2J pre-IEC short-form; same -750 ppm linear TC.
-    "UJ":  "-750 ppm",
+    "UJ":  "-750",
     # Class 2, IEC names
     "X7R": "+/-15%",
     "X7S": "+/-22%",
@@ -164,7 +168,8 @@ TCR_BY_DIELECTRIC = {
     "X7U": "+22/-56%",
     "X8R": "+/-15%",
     "X8L": "+15/-40%",
-    "X8M": "+/-50%",
+    "X8M": "+15/-50%",
+    "X8N": "+15/-60%",
     "X6S": "+/-22%",
     "X6T": "+22/-33%",
     "X5R": "+/-15%",
@@ -183,22 +188,13 @@ TCR_BY_DIELECTRIC = {
 # previously-emitted (and invalid) `V` and (rarely-stocked) `W`.
 PACK_SUFFIXES = ("L", "K", "D", "J")
 
-# Columns emitted in the xls, in order. Must match the per-row schema
-# documented in README.md ("Database Standards" section). The MFG 2/MPN 2
-# .. MFG 5/MPN 5 slots carry Murata-internal packaging alternates of the
-# same electrical part, NOT cross-vendor substitutes. The numbered slots
-# start at 2 (the unsuffixed MFG/MPN above is slot 1, by convention).
-HEADERS = [
-    "Comment", "Description", "MFG", "MPN",
-    "MFG 2", "MPN 2", "MFG 3", "MPN 3",
-    "MFG 4", "MPN 4", "MFG 5", "MPN 5",
-    "Package", "Value",
-    "Tolerance", "Tcr", "Tr", "Qual", "Voltage",
-    "Library Path", "Library Ref",
-    "Footprint Path", "Footprint Ref",
-    "Footprint Path 2", "Footprint Ref 2",
-    "Footprint Path 3", "Footprint Ref 3",
-]
+# Extra (non-standard) columns this family can supply (_standard.EXTRAS).
+# The MFG 2/MPN 2 .. MFG 5/MPN 5 "alternates" carry Murata-internal
+# packaging alternates of the same electrical part, NOT cross-vendor
+# substitutes. The numbered slots start at 2 (the unsuffixed MFG/MPN is
+# slot 1, by convention).
+SUPPORTED_EXTRAS = ("alternates",)
+MFG = "MURATA"
 
 
 def parse_mm(s: str) -> float:
@@ -224,21 +220,17 @@ def parse_opstemp(s: str) -> str:
 
 
 def parse_voltage(s: str) -> str:
-    """'50Vdc' -> '50V', '1,000Vdc' -> '1kV', '1,250Vdc' -> '1.25kV'."""
+    """'50Vdc' -> '50V', '1,000Vdc' -> '1000V', '1,250Vdc' -> '1250V'."""
     if not s:
         return ""
     m = re.match(r"^([\d.,]+)\s*V", s, re.IGNORECASE)
     if not m:
         return s
-    v = float(m.group(1).replace(",", ""))
-    if v >= 1000:
-        kv = v / 1000
-        if kv == int(kv):
-            return f"{int(kv)}kV"
-        return f"{kv:g}kV"
-    if v == int(v):
-        return f"{int(v)}V"
-    return f"{v:g}V"
+    return _standard.number(m.group(1).replace(",", "")) + "V"
+
+
+# Capacitance unit -> picofarads.
+_PF_PER_UNIT = {"p": 1, "n": 10**3, "u": 10**6, "µ": 10**6, "μ": 10**6, "m": 10**9}
 
 
 def parse_capacitance(s: str) -> str:
@@ -248,31 +240,10 @@ def parse_capacitance(s: str) -> str:
     m = re.match(r"^([\d.,]+)\s*([pnuµμmF]+)", s)
     if not m:
         return s
-    num = float(m.group(1).replace(",", ""))
-    unit = m.group(2).lower()
-    if unit.startswith("p"):
-        pf = num
-    elif unit.startswith("n"):
-        pf = num * 1e3
-    elif unit.startswith(("u", "µ", "μ")):
-        pf = num * 1e6
-    elif unit.startswith("m"):
-        pf = num * 1e9
-    else:
+    scale = _PF_PER_UNIT.get(m.group(2).lower()[0])
+    if scale is None:
         return s
-    if pf < 1000:
-        return _fmt_num(pf) + "pF"
-    if pf < 1e6:
-        return _fmt_num(pf / 1e3) + "nF"
-    if pf < 1e9:
-        return _fmt_num(pf / 1e6) + "uF"
-    return _fmt_num(pf / 1e9) + "mF"
-
-
-def _fmt_num(x: float) -> str:
-    if x == int(x):
-        return str(int(x))
-    return f"{x:g}"
+    return _standard.capacitance(Decimal(m.group(1).replace(",", "")) * scale)
 
 
 def parse_tolerance(s: str) -> str:
@@ -301,8 +272,10 @@ def format_height_code(thickness_max_mm: float) -> str:
 
 
 def build_row(r: dict, enabled_sizes: frozenset):
-    """Return a (None, row, body_key) tuple where row matches HEADERS,
-    or (reason, None, None) if this part should be skipped.
+    """Return a (None, record, body_key) tuple where record is a
+    database-standard row (a dict keyed by column name, see
+    vendors/_standard.py) including the MFG 2..MPN 5 packaging
+    alternates, or (reason, None, None) if this part should be skipped.
 
     body_key is (metric, height_code, height_mm) so the caller can
     accumulate the unique CAPC footprints needed by the dataset and
@@ -347,36 +320,33 @@ def build_row(r: dict, enabled_sizes: frozenset):
     dielectric = (r["Temperature characteristics"] or "").strip()
     tcr_str = TCR_BY_DIELECTRIC.get(dielectric, "")
 
-    description = (
-        "CAPACITOR CERAMIC "
-        + (cap_str.upper() if cap_str else "")
-        + (" " + tol_str if tol_str else "")
-        + (" " + v_str if v_str else "")
-        + (" " + dielectric if dielectric else "")
-        + (" " + eia if eia else "")
-    ).strip()
-
-    pack_cells = []
-    for suffix in PACK_SUFFIXES:
-        pack_cells += ["MURATA", mpn_full + suffix]
+    if not all((cap_str, tol_str, v_str, dielectric)):
+        return ("skipped: missing capacitance, tolerance, voltage or dielectric",
+                None, None)
 
     fp_cells = _vendor_common.xls_footprint_columns(PCBLIB, fp_root, FAMILY_ID)
 
-    return (None, [
-        mpn_full,                     # Comment
-        description,                  # Description
-        "MURATA",                     # MFG
-        mpn_full,                     # MPN
-        *pack_cells,                  # MFG 2/MPN 2 .. MFG 5/MPN 5
-        eia,                          # Package
-        cap_str,                      # Value
-        tol_str,                      # Tolerance
-        tcr_str,                      # Tcr
-        tr_str,                       # Tr
-        "",                           # Qual (commercial; not AEC-Q200)
-        v_str,                        # Voltage
-        SCHLIB, "CAP",                # Library Path / Ref
-    ] + fp_cells, body_key)
+    record = {
+        **dict(zip(_standard.COMMON, [
+            mpn_full,                     # Comment
+            _standard.capacitor_description(cap_str, tol_str, v_str, dielectric, eia),
+            MFG,
+            mpn_full,                     # MPN
+            eia,                          # Package
+            SCHLIB, "CAP",                # Library Path / Ref
+            *fp_cells,
+            "",                           # Qual (commercial; not AEC-Q200)
+        ])),
+        "Value": cap_str,
+        "Tolerance": tol_str,
+        "Voltage": v_str,
+        "Tcr": tcr_str,
+        "Tr": tr_str,
+    }
+    for slot, suffix in enumerate(PACK_SUFFIXES, 2):
+        record[f"MFG {slot}"] = MFG
+        record[f"MPN {slot}"] = mpn_full + suffix
+    return (None, record, body_key)
 
 
 # --- Per-vendor footprint JSON output ----------------------------------
@@ -460,12 +430,7 @@ def main() -> int:
 
     enabled_sizes = _vendor_common.enabled_sizes(FAMILY_ID)
 
-    wb = xlwt.Workbook()
-    sheet = wb.add_sheet("GRM")
-    for col, h in enumerate(HEADERS):
-        sheet.write(0, col, h)
-
-    row_idx = 0
+    records = []
     skipped = Counter()
     skipped_status = Counter()
     eia_counts = Counter()
@@ -481,8 +446,8 @@ def main() -> int:
                 skipped_status[status or "(blank)"] += 1
                 continue
 
-            reason, row, body_key = build_row(r, enabled_sizes)
-            if row is None:
+            reason, record, body_key = build_row(r, enabled_sizes)
+            if record is None:
                 skipped[reason] += 1
                 continue
 
@@ -490,13 +455,14 @@ def main() -> int:
             dielectric_counts[dielectric] += 1
             if dielectric and dielectric not in TCR_BY_DIELECTRIC:
                 unknown_dielectrics[dielectric] += 1
-            eia_counts[row[HEADERS.index("Package")]] += 1
+            eia_counts[record["Package"]] += 1
 
-            row_idx += 1
-            for col, cell in enumerate(row):
-                sheet.write(row_idx, col, cell)
+            records.append(record)
             unique_bodies.append(body_key)
 
+    wb = xlwt.Workbook()
+    row_idx = _standard.write_sheet(wb.add_sheet("GRM"), "C", FAMILY_ID, records,
+                                    supported=SUPPORTED_EXTRAS)
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(FOOTPRINTS_DIR, exist_ok=True)
     wb.save(args.output)

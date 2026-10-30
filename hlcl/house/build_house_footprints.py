@@ -48,7 +48,14 @@ Output (merged, with `vendor` injected per row):
       "footprints": [
         {"name": "...", "vendor": "...", "kind": "...", ...},
         ...
-      ]
+      ],
+      # Names more than one vendor emitted, vendors in priority order
+      # (winner first). The configurator's Priorities tab lists these.
+      "collisions": [
+        {"name": "...", "vendors": ["...", "..."], "sameGeometry": true},
+        ...
+      ],
+      "familyIds": {"<vendor key>": "<catalog family id>", ...}
     }
 
 Usage
@@ -193,6 +200,7 @@ def main() -> int:
     conflicts: dict[str, list[str]] = {}                # name -> [vendor_key, ...] in priority order
     contribution: Counter[str] = Counter()              # vendor_key -> # rows kept
     seen_in_vendor: set[Tuple[str, str]] = set()        # (vendor_key, name) -- catch in-file duplicates
+    rows_by_name: dict[str, list[dict]] = {}            # name -> every vendor's row, for geometry checks
 
     for vk, footprints in per_vendor_data:
         for fp in footprints:
@@ -210,6 +218,7 @@ def main() -> int:
                 continue
             seen_in_vendor.add((vk, name))
             conflicts.setdefault(name, []).append(vk)
+            rows_by_name.setdefault(name, []).append(fp)
             if name in chosen:
                 losers[vk] += 1
                 continue
@@ -227,10 +236,21 @@ def main() -> int:
         # but we defensively scrub).
         out_rows.append(merged_fp)
 
+    def geometry(fp: dict) -> str:
+        return json.dumps({k: fp.get(k) for k in ("kind", "bodyMm", "landPatternMm", "model")},
+                          sort_keys=True)
+
+    collisions = [
+        {"name": name, "vendors": vks,
+         "sameGeometry": len({geometry(fp) for fp in rows_by_name[name]}) == 1}
+        for name, vks in sorted(conflicts.items()) if len(vks) >= 2
+    ]
     out_doc = {
         "schemaVersion": MERGED_SCHEMA_VERSION,
         "vendorPriority": list(priority),
         "footprints": out_rows,
+        "collisions": collisions,
+        "familyIds": {vk: _config.family_id_for(vk) for vk, _ in per_vendor_data},
     }
 
     os.makedirs(FOOTPRINTS_DIR, exist_ok=True)

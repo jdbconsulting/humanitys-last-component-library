@@ -32,6 +32,11 @@
 			href: '/docs/component-selection/',
 			label: 'Component selection advice',
 			hint: 'Which passives to use where'
+		},
+		{
+			href: '/docs/database-standards/',
+			label: 'Database standards',
+			hint: 'Descriptions, parameters & columns'
 		}
 	] as const;
 

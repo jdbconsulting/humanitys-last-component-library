@@ -1,5 +1,28 @@
 [
 	{
+		"version": "0.3.1",
+		"status": "released",
+		"releasedOn": "2026-10-30",
+		"changes": [
+			"Add the Vishay TNPW high-stability thin-film family from both its datasheets: 37,622 AEC-Q200 e3 parts in 0201–1210 covering every ±50/25/15/10 ppm TCR, 1/0.5/0.1% tolerance and E24/E96/E192 value, plus 20,542 lead-bearing SnPb parts as an opt-in. Its Libraries card offers terminations, TCR and tolerance options, lowest TCR only, E24/E96-only values and alternate reels.",
+			"Add Vishay CRCW 0201 from its separate commercial datasheet: 1,464 component entries in every ±100, ±200 and −200/+400 ppm grade it lists, plus a 0 Ω jumper. CRCW 0201 is not AEC-Q200 qualified.",
+			"Add the Vishay CRCW 1% ±200 ppm grade wherever the datasheets offer it alongside ±100 ppm: 1–9.76 Ω in 0402–2512 and 47 Ω–1 MΩ in 0201 (1,407 parts, such as CRCW020110K0FNED).",
+			"Choose Vishay CRCW TCR grades on its Libraries card (±100, ±200 and −200/+400 ppm/K, optionally only the lowest per value), and list the other datasheet reel codes as alternate MPNs (MFG/MPN 2–5).",
+			"Standardize every family's workbook on the database standard: all-caps descriptions such as RESISTOR THICK FILM 4.7K OHM 5% 0603, upper-case manufacturer names, ASCII-only fields, unit-free Tcr and DCR values, and the standard columns in standard order. Rows that break these rules fail the build.",
+			"Make non-standard columns optional per family: tick Power, Features, Rating Conditions, Datasheet, alternate MPNs, SRF or Q under Extra / non-standard parameters on the Libraries tab. All are off by default. Alternate MPN columns are written only as far as some part has an alternate to list.",
+			"Name footprints per family. Vendor-specific names such as RESC0603X26_CRCWL are now the default and keep each family's geometry separate; generic IPC-7351B names such as RESC0603X26L remain available on the family's card. Families that previously shared generic names get new footprint names (Panasonic ERJ's RESC1005X35N is now RESC1005X35_ERJN): refresh existing Altium libraries, or switch those families to generic names.",
+			"Show only the families whose footprint names collide in the current build on the Priorities tab, with each shared footprint, its winning family and whether the geometries differ. When nothing collides, the tab says so. Reordering Murata ferrites now reaches the build.",
+			"Rebuild the library automatically in a background worker whenever settings change, so the component and footprint counts stay current without blocking the page. Downloads unlock once the build matches the current settings.",
+			"Add All on / All off buttons for each component group and for every group at once on the Libraries tab.",
+			"Add a Database standards docs page covering description formats, parameter conventions, and workbook columns.",
+			"Add a workbook viewer to the Generate tab for inspecting generated .xls rows and columns, including non-ASCII cell checks, before downloading.",
+			"Correct two Yageo catalog entries: RT0402DRE07470KL is 470 kΩ (was 0 Ω) and AC0805JR-3W470RL is 5% (was 0.5%).",
+			"Correct Murata LQM/LQW data read from the datasheet spec tables: DCR on 97 and rated current on 158 of 238 LQM parts, and SRF on 1,265 LQW parts whose tables list GHz.",
+			"Fill Murata GRM/GCM temperature characteristics for SL, CJ, CK and X8M dielectrics from Murata's part-numbering guide, and write kV ratings as volts (1000V).",
+			"The full default library now has 106,721 component entries, 609 footprints (including L/N/M density variants; vendor-specific names no longer share footprints between families), and 29 families."
+		]
+	},
+	{
 		"version": "0.3.0",
 		"status": "released",
 		"releasedOn": "2026-10-27",

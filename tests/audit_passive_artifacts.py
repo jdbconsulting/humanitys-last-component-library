@@ -7,6 +7,7 @@ import json
 import math
 from pathlib import Path
 import re
+import sys
 import zlib
 
 import olefile
@@ -14,6 +15,11 @@ import xlrd
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT/'hlcl/build'
+sys.path[:0] = [str(ROOT/'hlcl'), str(ROOT/'hlcl/vendors')]
+import _standard  # noqa: E402
+
+#: Library Ref symbol -> database-standard component kind.
+KIND_BY_SYMBOL = {'RES': 'R', 'CAP': 'C', 'INDUCTOR': 'I', 'FERRITE': 'FB'}
 REQUIRED = {
     'murata-gcd': ['GCD21BR72A104KA01L','GCD188R72A472KA01D'],
     'murata-krm': ['KRM55QR72A106KH01L'],
@@ -21,16 +27,18 @@ REQUIRED = {
     'kemet-open-mode': ['C0603F223K1RACAUTO','C1210F155K1RACAUTO'],
     'kemet-esd-c0g': ['C0805C473F3GECAUTO7210'],
     'tdk-c': ['C1005X7R1H473K050BB','C3225X7R2A225K230AB'],
-    'samsung-capacitors': ['CL31B474KCHWPNE','CL10B223KC8WPNC'],
+    # Packaging variants (…E, …C, …D) are opt-in alternates; check the base MPNs.
+    'samsung-capacitors': ['CL31B474KCHWPN','CL10B223KC8WPN'],
     'panasonic-era-a': ['ERA-2ARB6811X','ERA-2ARB562X'],
-    'vishay-crcw': ['CRCW0603562RFKEA','CRCW06030000Z0EA','CRCW04024K70JNED',
+    'vishay-crcw': ['CRCW02011K00FKED','CRCW020110K0FNED','CRCW020110R0FNED','CRCW02010000Z0ED','CRCW0603562RFKEA','CRCW06030000Z0EA','CRCW04024K70JNED',
                     'CRCW121810K0FKEK','CRCW201010K0FKEF','CRCW2512100RFKEG'],
+    'vishay-tnpw': ['TNPW12061K32DEEA','TNPW040228K0BEED','TNPW020122R0DEED','TNPW08053R52BYEA'],
     'vishay-rcs': ['RCS120633K0FKEA','RCS08051R50FKEA','RCS04020000Z0ED','RCS080510K0FKEA'],
     'vishay-rcp': ['RCP0603W10R0GEB','RCP2512W15R0FEA'],
     'vishay-mc-precision': ['MCS04020D2491BE000'],
     'vishay-mc-at': ['MCS0402MD1004BE000','MCS0402MD2673BE000','MCS0402MD3093BE000','MCA1206MD2492BP500'],
     'yageo-ac': ['AC1210FR-0760R4L'],
-    'murata-gcm': ['GCM1555C1H5R1BA16D'],
+    'murata-gcm': ['GCM1555C1H5R1BA16'],
 }
 
 
@@ -47,11 +55,19 @@ def main():
         found = set()
         for sheet in xlrd.open_workbook(path).sheets():
             headings = sheet.row_values(0)
+            # Default builds carry exactly the standard columns, and every
+            # written row must still pass the standard's checks.
+            kinds = {KIND_BY_SYMBOL[sheet.cell_value(n, headings.index('Library Ref'))]
+                     for n in range(1, sheet.nrows)}
+            assert len(kinds) == 1, (family, sheet.name, 'mixed kinds', kinds)
+            kind = kinds.pop()
+            assert headings == _standard.headers(kind, []), (family, 'non-standard columns', headings)
             mpn_cols = [i for i,h in enumerate(headings) if h == 'MPN' or h.startswith('MPN ')]
             fp_cols = [i for i,h in enumerate(headings) if h.startswith('Footprint Ref')]
             seen = set()
             for n in range(1,sheet.nrows):
                 row = sheet.row_values(n)
+                _standard.check(kind, dict(zip(headings, row)))
                 primary = row[headings.index('MPN')]
                 # Unchanged inductor catalogs can contain multiple variants of
                 # a base MPN. Enforce uniqueness for this change's families.

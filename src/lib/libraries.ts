@@ -36,6 +36,7 @@ export interface FamilyOption {
 				kind: 'multiselect';
 				choices: { id: string; label: string }[];
 				defaultValue: string[];
+				presentation?: 'pills' | 'checkboxes';
 		  }
 		| {
 				kind: 'number';
@@ -174,7 +175,8 @@ function controlFromCatalog(c: FamilyOptionControlCatalog): FamilyOption['contro
 			return {
 				kind: 'multiselect',
 				choices: [...c.choices],
-				defaultValue: [...c.default_value]
+				defaultValue: [...c.default_value],
+				presentation: c.presentation
 			};
 		case 'number':
 			return {

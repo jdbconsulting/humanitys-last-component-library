@@ -9,5 +9,49 @@
 	"subtype_order": 30,
 	"sort_order": 30,
 	"available_sizes": ["KRM55"],
-	"options": []
+	"options": [
+		{
+			"id": "footprint_names",
+			"label": "Footprint names",
+			"help": "Vendor-specific names keep this family's footprints separate from every other family. Generic IPC-7351B names can be shared with other families; the Priorities tab chooses which family's geometry wins when names overlap.",
+			"control": {
+				"kind": "select",
+				"default_value": "vendor",
+				"choices": [
+					{
+						"id": "vendor",
+						"label": "Vendor-specific, e.g. CAPC6153X390_KRMN"
+					},
+					{
+						"id": "generic",
+						"label": "Generic IPC-7351B, e.g. CAPC6153X390N"
+					}
+				]
+			}
+		},
+		{
+			"id": "extra_parameters",
+			"label": "Extra / non-standard parameters",
+			"help": "Columns outside the database standard. Ticked columns are added after the standard ones.",
+			"control": {
+				"kind": "multiselect",
+				"presentation": "checkboxes",
+				"choices": [
+					{
+						"id": "features",
+						"label": "Features"
+					},
+					{
+						"id": "rating_conditions",
+						"label": "Rating conditions"
+					},
+					{
+						"id": "datasheet",
+						"label": "Datasheet link"
+					}
+				],
+				"default_value": []
+			}
+		}
+	]
 }

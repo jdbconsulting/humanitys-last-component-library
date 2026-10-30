@@ -49,12 +49,13 @@ FOOTPRINT_ROOTS = [
 ]
 
 
-def build_table():
-    table = [pc.HEADERS]
+def build_records():
+    """Database-standard row dicts (see vendors/_standard.py) in workbook order."""
+    table = []
 
     # ERA-1AEB (0201)
     table += pc.make_era_range("Panasonic", "ERA-1AEB", "C",
-        pc.era_100_10k, "1/20W", "25V",
+        pc.era_100_10k, "0.05W", "25V",
         "0.1%", "+/-25", "-55:155", "AEC-Q200 GRADE 1", "0201", "RES", pc.SCHLIB,
         "RESC0603X23", VENDOR_KEY)
 
@@ -67,6 +68,11 @@ def build_table():
         "AEC-Q200 GRADE 1", "0402", "RES", pc.SCHLIB, "RESC1005X40_ERA2A", VENDOR_KEY)
 
     return table
+
+
+def build_table():
+    """Header row plus standard-column rows (used by the tests)."""
+    return pc.as_table(build_records())
 
 
 def era2_footprints():
@@ -82,12 +88,8 @@ def era2_footprints():
 
 
 def main():
-    table = build_table()
     wb = xlwt.Workbook()
-    sheet = wb.add_sheet(SHEET)
-    for x, line in enumerate(table):
-        for y, data in enumerate(line):
-            sheet.write(x, y, data)
+    pc.write_sheet(wb.add_sheet(SHEET), VENDOR_KEY, build_records())
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(FOOTPRINTS_DIR, exist_ok=True)

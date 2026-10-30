@@ -72,7 +72,7 @@ function deepMerge<T>(base: T, override: unknown): T {
  * what the build emits, so editing crosslinks shouldn't invalidate
  * stats from a previous run.
  */
-function configHash(cfg: BuildConfig): string {
+export function configHash(cfg: BuildConfig): string {
 	const subset = {
 		schema_version: cfg.schema_version,
 		families: cfg.families,
@@ -158,15 +158,29 @@ export function defaultBuildConfigWithFamilies(): BuildConfig {
  * `Cannot read properties of undefined (reading 'enabled')`.
  *
  * Backfilled entries land disabled (the user opted out by virtue of
- * never having seen them); known entries are preserved verbatim so
- * the user's persisted on/off state and option overrides survive.
+ * never having seen them). Known entries keep their on/off state, option
+ * values and overrides; only options they lack are added at defaults.
  */
 function backfillMissingFamilies(
 	families: Record<string, FamilyConfig>
 ): Record<string, FamilyConfig> {
 	const out = { ...families };
 	for (const fam of allFamilies()) {
-		if (!out[fam.id]) out[fam.id] = defaultFamilyConfig(fam.id);
+		const defaults = defaultFamilyConfig(fam.id);
+		const current = out[fam.id];
+		if (!current) {
+			out[fam.id] = defaults;
+			continue;
+		}
+		// Options added to a catalog after this config was saved (for example
+		// `extra_parameters`) start at their catalog defaults.
+		const missing = Object.entries(defaults.options).filter(([id]) => !(id in current.options));
+		if (missing.length > 0) {
+			out[fam.id] = {
+				...current,
+				options: { ...Object.fromEntries(missing), ...current.options }
+			};
+		}
 	}
 	return out;
 }
@@ -279,7 +293,8 @@ function migrateV1(raw: unknown): PersistedState | null {
 		name_origin: 'manual',
 		// Library-stats banner didn't exist pre-v2; the very next build
 		// will populate it.
-		build_stats: null
+		build_stats: null,
+		auto_build: true
 	};
 
 	return { storage_version: STORAGE_VERSION, config, ui };
@@ -292,6 +307,8 @@ function migrateV1(raw: unknown): PersistedState | null {
 class AppState {
 	config = $state<BuildConfig>(initialBuildConfig());
 	ui = $state<UiSession>(defaultUiSession());
+	/** True once `hydrate()` has loaded persisted state (auto-build waits for it). */
+	hydrated = $state(false);
 
 	/**
 	 * In-memory hash of the BuildConfig taken at the moment a preset was
@@ -311,7 +328,11 @@ class AppState {
 	/** Hydrate from localStorage. Safe to call multiple times. */
 	hydrate(): void {
 		if (typeof window === 'undefined') return;
+		this.loadPersisted();
+		this.hydrated = true;
+	}
 
+	private loadPersisted(): void {
 		// Try v2 first.
 		try {
 			const raw = localStorage.getItem(STORAGE_KEY);
@@ -386,8 +407,7 @@ class AppState {
 		// plain `nextConfig` matches what `snapshotKey()` will compute
 		// later via $state.snapshot — both walk the same object shape
 		// in the same key order.
-		const anchor =
-			nextUi.name_origin === 'preset' ? JSON.stringify(nextConfig) : '';
+		const anchor = nextUi.name_origin === 'preset' ? JSON.stringify(nextConfig) : '';
 
 		this.config = nextConfig;
 		this.ui = nextUi;
@@ -590,6 +610,14 @@ class AppState {
 		return Object.entries(this.config.families)
 			.filter(([, v]) => v.enabled)
 			.map(([k]) => k);
+	}
+
+	/** Turn a set of families on or off together (Libraries tab group buttons). */
+	setFamiliesEnabled(ids: readonly string[], enabled: boolean): void {
+		for (const id of ids) {
+			const fam = this.config.families[id];
+			if (fam) fam.enabled = enabled;
+		}
 	}
 
 	/**

@@ -16,15 +16,14 @@ import xlwt
 
 import _common
 import _dblib
+import _standard
 
 ROOT = Path(__file__).resolve().parents[1]
-HEADERS = [
-    "Comment", "Description", "MFG", "MPN", "Package", "Value",
-    "Tolerance", "Tcr", "Tr", "Qual", "Voltage", "Power", "Features",
-    "Rating Conditions", "Datasheet", "Library Path", "Library Ref",
-    "Footprint Path", "Footprint Ref", "Footprint Path 2", "Footprint Ref 2",
-    "Footprint Path 3", "Footprint Ref 3",
-]
+#: Extra (non-standard) columns these importers can supply, per kind.
+SUPPORTED_EXTRAS = {
+    "R": ("power", "features", "rating_conditions", "datasheet"),
+    "C": ("features", "rating_conditions", "datasheet"),
+}
 
 
 def number(value) -> str:
@@ -79,15 +78,33 @@ class Part:
     conditions: str
     datasheet: str
     geometry: dict = field(compare=False)
+    construction: str = ""  # resistor film type (THICK FILM) or capacitor dielectric (X7R)
+    alternates: tuple = ()  # other orderable MPNs (e.g. reel codes) -> MFG/MPN 2-5
 
-    def cells(self, family):
-        symbol = "CAP" if self.kind == "C" else "RES"
-        description = f"{symbol} {self.features} {self.value} {self.tolerance} {self.voltage} {self.package}".strip()
-        return [self.mpn, description, self.manufacturer, self.mpn, self.package,
-                self.value, self.tolerance, self.tcr, self.temperature,
-                self.qualification, self.voltage, self.power, self.features,
-                self.conditions, self.datasheet, "house.SchLib", symbol,
-                *_common.xls_footprint_columns("house.PcbLib", self.geometry["root"], family)]
+    def record(self, family):
+        """Database-standard row (see _standard) plus the supported extra columns."""
+        if not self.construction:
+            raise ValueError(f"{self.mpn}: needs a construction or dielectric")
+        if self.kind == "C":
+            description = _standard.capacitor_description(
+                self.value, self.tolerance, self.voltage, self.construction, self.package)
+        else:
+            description = _standard.resistor_description(
+                self.construction, self.value, self.tolerance, self.package)
+        footprints = _common.xls_footprint_columns("house.PcbLib", self.geometry["root"], family)
+        return {
+            **dict(zip(_standard.COMMON, [
+                self.mpn, description, self.manufacturer.upper(), self.mpn,
+                self.package.upper(), "house.SchLib", "CAP" if self.kind == "C" else "RES",
+                *footprints, self.qualification])),
+            "Value": self.value, "Tolerance": self.tolerance, "Voltage": self.voltage,
+            "Tcr": self.tcr, "Tr": self.temperature, "Power": self.power,
+            "Features": self.features, "Rating Conditions": self.conditions,
+            "Datasheet": self.datasheet,
+            **{column: value for n in range(2, 6) for column, value in (
+                (f"MFG {n}", self.manufacturer.upper() if n - 2 < len(self.alternates) else ""),
+                (f"MPN {n}", self.alternates[n - 2] if n - 2 < len(self.alternates) else ""))},
+        }
 
 
 def body(prefix, metric, height, qualifier, length, width, terminal, source, **extra):
@@ -108,8 +125,11 @@ def read_csv(path):
         return list(csv.DictReader(stream))
 
 
-def run(family, sheet_name, parts):
-    """Validate first, then emit an offline workbook, DbLib and footprint set."""
+def run(family, sheet_name, parts, extras=()):
+    """Validate first, then emit an offline workbook, DbLib and footprint set.
+
+    ``extras`` adds family-specific supported extra columns (e.g. alternates).
+    """
     enabled = _common.enabled_sizes(family)
     seen, geometries, accepted = set(), {}, []
     for part in parts:
@@ -127,13 +147,14 @@ def run(family, sheet_name, parts):
     footprints = _common.expand_footprint_rows(geometries.values(), family)
     for fp in footprints:
         _common._validate_footprint(fp)
+    kinds = {part.kind for part in parts}
+    if len(kinds) != 1:
+        raise ValueError(f"{family}: expected one component kind, got {sorted(kinds)}")
+    kind = kinds.pop()
     wb = xlwt.Workbook()
-    sheet = wb.add_sheet(sheet_name)
-    for col, heading in enumerate(HEADERS):
-        sheet.write(0, col, heading)
-    for row, part in enumerate(sorted(accepted, key=lambda p: p.mpn), 1):
-        for col, cell in enumerate(part.cells(family)):
-            sheet.write(row, col, cell)
+    _standard.write_sheet(wb.add_sheet(sheet_name), kind, family,
+                          [p.record(family) for p in sorted(accepted, key=lambda p: p.mpn)],
+                          SUPPORTED_EXTRAS[kind] + tuple(extras))
     output = ROOT / "build" / "output"
     output.mkdir(parents=True, exist_ok=True)
     wb.save(str(output / f"{family}.xls"))
@@ -143,7 +164,8 @@ def run(family, sheet_name, parts):
     print(f"{family}: {len(accepted)} parts, {len(footprints)} footprints")
 
 
-def csv_main(family, sheet, default_input, decoder):
+def csv_main(family, sheet, default_input, decoder, select=None, extras=()):
+    """``select`` optionally narrows the decoded parts (family options)."""
     parser = argparse.ArgumentParser(description=f"Build {family} from a verified offline catalog")
     parser.add_argument("--input", default=str(default_input))
     args = parser.parse_args()
@@ -155,4 +177,4 @@ def csv_main(family, sheet, default_input, decoder):
                 parts.append(part)
         except (ValueError, KeyError, ArithmeticError) as exc:
             raise ValueError(f"{args.input}:{line}: {exc}") from exc
-    run(family, sheet, parts)
+    run(family, sheet, select(parts) if select else parts, extras)
